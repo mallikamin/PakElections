@@ -216,7 +216,13 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🇵🇰 Pakistan Election Dashboard 2024</h1>
+            <h1>🇵🇰 Pakistan Election Dashboard</h1>
+            <div style="margin-top: 15px;">
+                <label for="yearSelect" style="color: white; font-size: 1.1rem; margin-right: 10px;">Select Year:</label>
+                <select id="yearSelect" style="padding: 8px 15px; border-radius: 5px; border: none; font-size: 1rem;">
+                    <option value="">All Years</option>
+                </select>
+            </div>
         </div>
         
         <div class="kpi-grid" id="kpiSection">
@@ -284,8 +290,10 @@
 
     <script>
         // Global variables
+        let allData = [];
         let data = [];
         let charts = {};
+        let selectedYear = '';
 
         // Initialize tabs
         const tabs = document.querySelectorAll('.tab');
@@ -330,10 +338,9 @@
             complete: function(results) {
                 console.log("Raw data loaded:", results.data.length, "rows");
                 
-                // Filter and clean data for 2024
-                data = results.data
-                    .filter(row => row.Year === "2024" || row.year === "2024")
-                    .filter(row => row["Registered Voters"] || row["registered_voters"])
+                // Process all data first
+                allData = results.data
+                    .filter(row => row["Registered Voters"] || row["registered_voters"] || row.RegisteredVoters)
                     .map(row => {
                         // Normalize column names and parse numbers
                         const normalized = {
@@ -341,32 +348,53 @@
                             District: row.District || row.district || '',
                             Year: row.Year || row.year || '2024',
                             RegisteredVoters: parseNumberSafe(row["Registered Voters"] || row.registered_voters || row.RegisteredVoters),
-                            TurnoutN: parseNumberSafe(row["Turnout N"] || row.turnout_n || row.TurnoutN || row.Turnout),
-                            TurnoutPct: parseNumberSafe(row["Turnout %"] || row.turnout_pct || row.TurnoutPct)
+                            Voters: parseNumberSafe(row["Voters"] || row.voters || row.Voters || 0), // This is actual turnout
+                            TurnoutN: parseNumberSafe(row["Turnout N"] || row.turnout_n || row.TurnoutN || row["Voters"] || row.voters),
+                            TurnoutPct: 0 // Will calculate this properly
                         };
                         
-                        // Calculate turnout percentage if missing
-                        if (!normalized.TurnoutPct && normalized.RegisteredVoters > 0) {
-                            normalized.TurnoutPct = calculateTurnoutRate(normalized.TurnoutN, normalized.RegisteredVoters);
+                        // Use "Voters" column as the actual turnout if available, otherwise use TurnoutN
+                        const actualTurnout = parseNumberSafe(row["Voters"] || row.voters) || normalized.TurnoutN;
+                        normalized.TurnoutN = actualTurnout;
+                        
+                        // Calculate turnout percentage correctly
+                        if (normalized.RegisteredVoters > 0) {
+                            normalized.TurnoutPct = (actualTurnout / normalized.RegisteredVoters * 100);
                         }
                         
                         return normalized;
                     })
                     .filter(row => row.RegisteredVoters > 0); // Only keep rows with voter data
 
-                console.log("Processed data:", data.length, "rows");
+                console.log("Processed all data:", allData.length, "rows");
                 
-                if (data.length === 0) {
+                if (allData.length === 0) {
                     document.getElementById('kpiSection').innerHTML = 
                         '<div style="text-align: center; color: #dc3545; padding: 40px;">No valid election data found. Please check your CSV file format.</div>';
                     return;
                 }
 
-                // Initialize dashboard
-                renderKPIs();
-                renderProvinceChart();
-                populateDistrictDropdowns();
-                renderTrendsChart();
+                // Populate year dropdown
+                const years = [...new Set(allData.map(row => row.Year))].sort().reverse();
+                const yearSelect = document.getElementById('yearSelect');
+                years.forEach(year => {
+                    yearSelect.add(new Option(year, year));
+                });
+                
+                // Set default to latest year
+                selectedYear = years[0];
+                yearSelect.value = selectedYear;
+                
+                // Add year selection handler
+                yearSelect.addEventListener('change', () => {
+                    selectedYear = yearSelect.value;
+                    filterDataByYear();
+                    updateAllVisualizations();
+                });
+
+                // Initial load with latest year
+                filterDataByYear();
+                updateAllVisualizations();
             },
             error: function(error) {
                 console.error("Error loading data:", error);
@@ -374,6 +402,22 @@
                     '<div style="text-align: center; color: #dc3545; padding: 40px;">Error loading data. Please ensure data.csv exists and is properly formatted.</div>';
             }
         });
+
+        function filterDataByYear() {
+            if (selectedYear === '') {
+                data = [...allData];
+            } else {
+                data = allData.filter(row => row.Year === selectedYear);
+            }
+            console.log(`Filtered data for year ${selectedYear}:`, data.length, "rows");
+        }
+
+        function updateAllVisualizations() {
+            renderKPIs();
+            renderProvinceChart();
+            populateDistrictDropdowns();
+            renderTrendsChart();
+        }
 
         function renderKPIs() {
             const totalVoters = data.reduce((sum, row) => sum + row.RegisteredVoters, 0);
@@ -505,7 +549,7 @@
             const compare1 = document.getElementById("compare1");
             const compare2 = document.getElementById("compare2");
 
-            // Clear existing options
+            // Clear existing options except first one
             [districtSelect, compare1, compare2].forEach(select => {
                 while (select.children.length > 1) {
                     select.removeChild(select.lastChild);
@@ -519,10 +563,22 @@
                 compare2.add(new Option(district, district));
             });
 
+            // Clear previous event listeners by cloning elements
+            const newDistrictSelect = districtSelect.cloneNode(true);
+            const newCompare1 = compare1.cloneNode(true);
+            const newCompare2 = compare2.cloneNode(true);
+            
+            districtSelect.parentNode.replaceChild(newDistrictSelect, districtSelect);
+            compare1.parentNode.replaceChild(newCompare1, compare1);
+            compare2.parentNode.replaceChild(newCompare2, compare2);
+
             // District selection handler
-            districtSelect.addEventListener('change', () => {
-                const district = districtSelect.value;
-                if (!district) return;
+            newDistrictSelect.addEventListener('change', () => {
+                const district = newDistrictSelect.value;
+                if (!district) {
+                    document.getElementById('districtStats').style.display = 'none';
+                    return;
+                }
 
                 const rows = data.filter(r => r.District === district);
                 const totalVoters = rows.reduce((sum, r) => sum + r.RegisteredVoters, 0);
@@ -535,6 +591,123 @@
                 document.getElementById('districtStats').innerHTML = `
                     <div class="stat-item">
                         <div class="stat-value">${formatNumber(totalVoters)}</div>
+                        <div class="stat-label">Registered Voters</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">${formatNumber(totalTurnout)}</div>
+                        <div class="stat-label">Actual Turnout</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">${avgTurnoutPct.toFixed(1)}%</div>
+                        <div class="stat-label">Turnout Rate</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">${constituencies}</div>
+                        <div class="stat-label">Constituencies</div>
+                    </div>
+                `;
+                document.getElementById('districtStats').style.display = 'grid';
+
+                // Render chart
+                if (charts.districtChart) {
+                    charts.districtChart.destroy();
+                }
+
+                const ctx = document.getElementById("districtChart").getContext("2d");
+                charts.districtChart = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Voted', 'Did Not Vote'],
+                        datasets: [{
+                            data: [totalTurnout, totalVoters - totalTurnout],
+                            backgroundColor: ['#28a745', '#dc3545'],
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: `Voter Participation in ${district} ${selectedYear ? '(' + selectedYear + ')' : ''}`
+                            }
+                        }
+                    }
+                });
+            });
+
+            // Comparison handler
+            function updateComparison() {
+                const d1 = newCompare1.value;
+                const d2 = newCompare2.value;
+                if (!d1 || !d2) return;
+
+                const getStats = (district) => {
+                    const rows = data.filter(r => r.District === district);
+                    const totalVoters = rows.reduce((sum, r) => sum + r.RegisteredVoters, 0) / 1000000;
+                    const totalTurnout = rows.reduce((sum, r) => sum + r.TurnoutN, 0) / 1000000;
+                    const avgTurnoutPct = rows.length > 0 ? 
+                        (rows.reduce((sum, r) => sum + r.TurnoutPct, 0) / rows.length) : 0;
+                    return [totalVoters, totalTurnout, avgTurnoutPct];
+                };
+
+                const stats1 = getStats(d1);
+                const stats2 = getStats(d2);
+
+                if (charts.compareChart) {
+                    charts.compareChart.destroy();
+                }
+
+                const ctx = document.getElementById("compareChart").getContext("2d");
+                charts.compareChart = new Chart(ctx, {
+                    type: 'radar',
+                    data: {
+                        labels: ['Registered Voters (M)', 'Actual Turnout (M)', 'Turnout Rate (%)'],
+                        datasets: [
+                            {
+                                label: d1,
+                                data: stats1,
+                                backgroundColor: 'rgba(0, 123, 255, 0.2)',
+                                borderColor: 'rgba(0, 123, 255, 1)',
+                                pointBackgroundColor: 'rgba(0, 123, 255, 1)',
+                                pointBorderColor: '#fff',
+                                pointHoverBackgroundColor: '#fff',
+                                pointHoverBorderColor: 'rgba(0, 123, 255, 1)'
+                            },
+                            {
+                                label: d2,
+                                data: stats2,
+                                backgroundColor: 'rgba(40, 167, 69, 0.2)',
+                                borderColor: 'rgba(40, 167, 69, 1)',
+                                pointBackgroundColor: 'rgba(40, 167, 69, 1)',
+                                pointBorderColor: '#fff',
+                                pointHoverBackgroundColor: '#fff',
+                                pointHoverBorderColor: 'rgba(40, 167, 69, 1)'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        elements: {
+                            line: {
+                                borderWidth: 3
+                            }
+                        },
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: `District Comparison: ${d1} vs ${d2} ${selectedYear ? '(' + selectedYear + ')' : ''}`
+                            }
+                        }
+                    }
+                });
+            }
+
+            newCompare1.addEventListener('change', updateComparison);
+            newCompare2.addEventListener('change', updateComparison);
+        }<div class="stat-value">${formatNumber(totalVoters)}</div>
                         <div class="stat-label">Registered Voters</div>
                     </div>
                     <div class="stat-item">
@@ -654,44 +827,72 @@
         }
 
         function renderTrendsChart() {
+            // Enhanced engagement analysis with concrete metrics
+            const totalDistricts = data.length;
+            const avgTurnout = data.length > 0 ? 
+                (data.reduce((sum, row) => sum + row.TurnoutPct, 0) / data.length) : 0;
+            
             // Group districts by turnout rate ranges for engagement analysis
             const ranges = [
-                { min: 0, max: 30, label: 'Low (0-30%)', color: '#dc3545' },
-                { min: 30, max: 50, label: 'Medium (30-50%)', color: '#ffc107' },
-                { min: 50, max: 70, label: 'Good (50-70%)', color: '#17a2b8' },
-                { min: 70, max: 100, label: 'Excellent (70%+)', color: '#28a745' }
+                { min: 0, max: 30, label: 'Low Engagement\n(0-30%)', color: '#dc3545' },
+                { min: 30, max: 50, label: 'Below Average\n(30-50%)', color: '#fd7e14' },
+                { min: 50, max: 70, label: 'Good Engagement\n(50-70%)', color: '#ffc107' },
+                { min: 70, max: 100, label: 'High Engagement\n(70%+)', color: '#28a745' }
             ];
 
             const engagementData = ranges.map(range => {
                 const districtsInRange = data.filter(row => 
                     row.TurnoutPct >= range.min && row.TurnoutPct < range.max
                 );
+                const totalVotersInRange = districtsInRange.reduce((sum, row) => sum + row.RegisteredVoters, 0);
+                const totalTurnoutInRange = districtsInRange.reduce((sum, row) => sum + row.TurnoutN, 0);
+                const avgTurnoutInRange = districtsInRange.length > 0 ?
+                    (districtsInRange.reduce((sum, row) => sum + row.TurnoutPct, 0) / districtsInRange.length) : 0;
+                
                 return {
                     label: range.label,
                     count: districtsInRange.length,
-                    totalVoters: districtsInRange.reduce((sum, row) => sum + row.RegisteredVoters, 0) / 1000000,
+                    percentage: totalDistricts > 0 ? (districtsInRange.length / totalDistricts * 100) : 0,
+                    totalVoters: totalVotersInRange / 1000000,
+                    totalTurnout: totalTurnoutInRange / 1000000,
+                    avgTurnout: avgTurnoutInRange,
                     color: range.color
                 };
             });
+
+            // Add summary stats
+            const highEngagementDistricts = engagementData[3].count;
+            const lowEngagementDistricts = engagementData[0].count;
+            
+            // Create detailed chart
+            if (charts.trendsChart) {
+                charts.trendsChart.destroy();
+            }
 
             const ctx = document.getElementById("trendsChart").getContext("2d");
             charts.trendsChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: engagementData.map(d => d.label),
+                    labels: engagementData.map(d => d.label.replace('\n', ' ')),
                     datasets: [
                         {
                             label: 'Number of Districts',
                             data: engagementData.map(d => d.count),
-                            backgroundColor: engagementData.map(d => d.color),
+                            backgroundColor: engagementData.map(d => d.color + '90'),
+                            borderColor: engagementData.map(d => d.color),
+                            borderWidth: 2,
                             yAxisID: 'y'
                         },
                         {
-                            label: 'Total Registered Voters (M)',
-                            data: engagementData.map(d => d.totalVoters),
-                            backgroundColor: 'rgba(108, 117, 125, 0.6)',
+                            label: 'Avg Turnout Rate (%)',
+                            data: engagementData.map(d => d.avgTurnout),
+                            type: 'line',
+                            borderColor: '#6f42c1',
+                            backgroundColor: '#6f42c1',
+                            borderWidth: 3,
+                            fill: false,
                             yAxisID: 'y1',
-                            type: 'line'
+                            tension: 0.4
                         }
                     ]
                 },
@@ -701,7 +902,30 @@
                     plugins: {
                         title: {
                             display: true,
-                            text: 'Voter Engagement Distribution Across Districts'
+                            text: `Voter Engagement Analysis ${selectedYear ? '- ' + selectedYear : ''}\n` +
+                                  `Total Districts: ${totalDistricts} | National Average: ${avgTurnout.toFixed(1)}%\n` +
+                                  `High Engagement: ${highEngagementDistricts} districts | Low Engagement: ${lowEngagementDistricts} districts`,
+                            font: {
+                                size: 14
+                            }
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    const dataIndex = context.dataIndex;
+                                    const data = engagementData[dataIndex];
+                                    return [
+                                        `Districts: ${data.count} (${data.percentage.toFixed(1)}%)`,
+                                        `Total Voters: ${formatNumber(data.totalVoters * 1000000)}`,
+                                        `Total Turnout: ${formatNumber(data.totalTurnout * 1000000)}`,
+                                        `Avg Turnout: ${data.avgTurnout.toFixed(1)}%`
+                                    ];
+                                }
+                            }
                         }
                     },
                     scales: {
@@ -720,9 +944,10 @@
                             display: true,
                             position: 'right',
                             beginAtZero: true,
+                            max: 100,
                             title: {
                                 display: true,
-                                text: 'Registered Voters (Millions)'
+                                text: 'Average Turnout Rate (%)'
                             },
                             grid: {
                                 drawOnChartArea: false,
@@ -731,6 +956,47 @@
                     }
                 }
             });
+
+            // Add concrete insights below the chart
+            const trendsContainer = document.getElementById('trends');
+            const existingInsights = trendsContainer.querySelector('.insights');
+            if (existingInsights) {
+                existingInsights.remove();
+            }
+
+            const insightsDiv = document.createElement('div');
+            insightsDiv.className = 'insights';
+            insightsDiv.innerHTML = `
+                <div class="chart-container" style="margin-top: 20px;">
+                    <h3>📊 Key Insights ${selectedYear ? '(' + selectedYear + ')' : ''}</h3>
+                    <div class="stats-grid">
+                        <div class="stat-item" style="background: linear-gradient(45deg, #28a745, #20c997);">
+                            <div class="stat-value" style="color: white;">${highEngagementDistricts}</div>
+                            <div class="stat-label" style="color: #f8f9fa;">High Engagement Districts (70%+)</div>
+                        </div>
+                        <div class="stat-item" style="background: linear-gradient(45deg, #dc3545, #e74c3c);">
+                            <div class="stat-value" style="color: white;">${lowEngagementDistricts}</div>
+                            <div class="stat-label" style="color: #f8f9fa;">Low Engagement Districts (<30%)</div>
+                        </div>
+                        <div class="stat-item" style="background: linear-gradient(45deg, #6f42c1, #8e44ad);">
+                            <div class="stat-value" style="color: white;">${avgTurnout.toFixed(1)}%</div>
+                            <div class="stat-label" style="color: #f8f9fa;">National Average Turnout</div>
+                        </div>
+                        <div class="stat-item" style="background: linear-gradient(45deg, #17a2b8, #3498db);">
+                            <div class="stat-value" style="color: white;">${((highEngagementDistricts / totalDistricts) * 100).toFixed(1)}%</div>
+                            <div class="stat-label" style="color: #f8f9fa;">Districts with High Engagement</div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; font-size: 0.95rem;">
+                        <strong>Analysis Summary:</strong><br>
+                        • <strong>${((highEngagementDistricts / totalDistricts) * 100).toFixed(1)}%</strong> of districts show high voter engagement (70%+ turnout)<br>
+                        • <strong>${((lowEngagementDistricts / totalDistricts) * 100).toFixed(1)}%</strong> of districts have concerning low engagement (<30% turnout)<br>
+                        • Most districts (${(((engagementData[1].count + engagementData[2].count) / totalDistricts) * 100).toFixed(1)}%) fall in the moderate engagement range<br>
+                        • National average turnout is <strong>${avgTurnout.toFixed(1)}%</strong>, ${avgTurnout >= 50 ? 'indicating healthy' : avgTurnout >= 40 ? 'showing moderate' : 'revealing low'} democratic participation
+                    </div>
+                </div>
+            `;
+            trendsContainer.appendChild(insightsDiv);
         }
     </script>
 </body>
