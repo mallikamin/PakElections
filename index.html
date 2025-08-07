@@ -336,19 +336,15 @@
             return isNaN(num) ? 0 : num;
         }
 
-        function calculateTurnoutRate(turnout, registered) {
-            return registered > 0 ? (turnout / registered * 100) : 0;
-        }
-
         // Generate sample data for demo with realistic Pakistani election numbers
         function generateSampleData() {
             const provinces = [
-                { name: 'Punjab', districts: 36, baseVoters: 120000000 },      // ~120M registered
-                { name: 'Sindh', districts: 30, baseVoters: 45000000 },        // ~45M registered  
-                { name: 'Khyber Pakhtunkhwa', districts: 25, baseVoters: 35000000 }, // ~35M registered
-                { name: 'Balochistan', districts: 20, baseVoters: 15000000 },   // ~15M registered
-                { name: 'Islamabad', districts: 1, baseVoters: 2000000 },      // ~2M registered
-                { name: 'AJK', districts: 5, baseVoters: 5000000 }             // ~5M registered
+                { name: 'Punjab', districts: 36, baseVoters: 120000000 },
+                { name: 'Sindh', districts: 30, baseVoters: 45000000 },
+                { name: 'Khyber Pakhtunkhwa', districts: 25, baseVoters: 35000000 },
+                { name: 'Balochistan', districts: 20, baseVoters: 15000000 },
+                { name: 'Islamabad', districts: 1, baseVoters: 2000000 },
+                { name: 'AJK', districts: 5, baseVoters: 5000000 }
             ];
             const years = ['2018', '2024'];
             const sampleData = [];
@@ -358,47 +354,26 @@
                 
                 for (let i = 1; i <= province.districts; i++) {
                     years.forEach(year => {
-                        // Create realistic voter numbers per district
-                        const registeredVoters = Math.floor(avgVotersPerDistrict * (0.8 + Math.random() * 0.4)); // ±20% variation
-                        
-                        // Pakistan typically has 50-60% turnout
+                        const registeredVoters = Math.floor(avgVotersPerDistrict * (0.8 + Math.random() * 0.4));
                         const turnoutRate = year === '2024' ? 
-                            (0.45 + Math.random() * 0.25) : // 2024: 45-70% range
-                            (0.40 + Math.random() * 0.25);  // 2018: 40-65% range
-                        
+                            (0.45 + Math.random() * 0.25) : 
+                            (0.40 + Math.random() * 0.25);
                         const actualTurnout = Math.floor(registeredVoters * turnoutRate);
                         
-                        // Create multiple rows per district (simulating constituency/candidate data)
-                        const constituenciesPerDistrict = Math.floor(Math.random() * 4) + 2; // 2-5 constituencies per district
-                        
-                        for (let j = 1; j <= constituenciesPerDistrict; j++) {
-                            const constituencyRegistered = Math.floor(registeredVoters / constituenciesPerDistrict);
-                            const constituencyTurnout = Math.floor(actualTurnout / constituenciesPerDistrict);
-                            
-                            sampleData.push({
-                                Province: province.name,
-                                District: `${province.name.replace(' ', '')}-${i.toString().padStart(2, '0')}`,
-                                Constituency: `${province.name.substring(0,2)}-${i}-${j}`,
-                                Year: year,
-                                RegisteredVoters: constituencyRegistered,
-                                Voters: constituencyTurnout, // This is the actual voter turnout per constituency
-                                TurnoutN: constituencyTurnout,
-                                TurnoutPct: (constituencyTurnout / constituencyRegistered) * 100
-                            });
-                        }
+                        sampleData.push({
+                            Province: province.name,
+                            District: `${province.name.replace(' ', '')}-${i.toString().padStart(2, '0')}`,
+                            Year: year,
+                            RegisteredVoters: registeredVoters,
+                            Voters: actualTurnout,
+                            TurnoutN: actualTurnout,
+                            TurnoutPct: (actualTurnout / registeredVoters) * 100
+                        });
                     });
                 }
             });
 
-            console.log("Generated realistic sample data:", sampleData.length, "constituency records");
-            console.log("Sample records:", sampleData.slice(0, 5));
-            
-            // Verify totals
-            const year2024Data = sampleData.filter(row => row.Year === '2024');
-            const totalRegistered2024 = year2024Data.reduce((sum, row) => sum + row.RegisteredVoters, 0);
-            const totalTurnout2024 = year2024Data.reduce((sum, row) => sum + row.Voters, 0);
-            console.log(`Sample 2024 totals: ${(totalRegistered2024/1000000).toFixed(1)}M registered, ${(totalTurnout2024/1000000).toFixed(1)}M turnout (${((totalTurnout2024/totalRegistered2024)*100).toFixed(1)}%)`);
-            
+            console.log("Generated sample data:", sampleData.length, "records");
             return sampleData;
         }
 
@@ -406,7 +381,6 @@
         function loadData() {
             console.log("Attempting to load CSV data...");
             
-            // Try to load from CSV first, fallback to sample data
             Papa.parse("data.csv", {
                 header: true,
                 download: true,
@@ -416,87 +390,70 @@
                     console.log("CSV parse complete:", results);
                     if (results.data && results.data.length > 0 && Object.keys(results.data[0]).length > 1) {
                         console.log("Valid CSV data found, processing...");
-                        console.log("CSV headers:", Object.keys(results.data[0]));
-                        console.log("First few rows:", results.data.slice(0, 3));
                         processData(results.data);
                     } else {
-                        console.log("No valid CSV data found, using realistic sample data");
+                        console.log("No valid CSV data found, using sample data");
                         processData(generateSampleData());
                     }
                 },
                 error: function(error) {
                     console.log("CSV loading error:", error);
-                    console.log("Using realistic sample data instead");
                     processData(generateSampleData());
                 }
             });
         }
 
         function processData(rawData) {
+            console.log("=== DATA PROCESSING DEBUG ===");
             console.log("Raw data loaded:", rawData.length, "rows");
             console.log("Sample raw data:", rawData.slice(0, 3));
             
-            // First, normalize and clean the raw data
-            const normalizedData = rawData
-                .filter(row => row.RegisteredVoters || row["Registered Voters"] || row.registered_voters)
+            // CRITICAL FIX: Direct summation approach for total voter turnout
+            // The 'Voters' column represents the actual voter turnout per row
+            // We sum ALL rows for the selected year to get total turnout
+            
+            // Clean and normalize the data
+            allData = rawData
+                .filter(row => {
+                    const hasRegistered = row.RegisteredVoters || row["Registered Voters"] || row.registered_voters;
+                    const hasVoters = row.Voters || row.voters || row.TurnoutN || row["Turnout N"] || row.turnout_n;
+                    return hasRegistered && hasVoters;
+                })
                 .map(row => {
                     const registeredVoters = parseNumberSafe(row.RegisteredVoters || row["Registered Voters"] || row.registered_voters);
                     const actualVoterTurnout = parseNumberSafe(row.Voters || row.voters || row.TurnoutN || row["Turnout N"] || row.turnout_n);
                     
-                    return {
+                    const normalized = {
                         Province: (row.Province || row.province || '').trim(),
                         District: (row.District || row.district || '').trim(),
                         Year: (row.Year || row.year || '2024').toString(),
                         RegisteredVoters: registeredVoters,
-                        Voters: actualVoterTurnout,
-                        // Add other fields that might help with aggregation
+                        Voters: actualVoterTurnout, // This is the key field - actual turnout
+                        TurnoutN: actualVoterTurnout,
+                        TurnoutPct: registeredVoters > 0 ? (actualVoterTurnout / registeredVoters * 100) : 0,
                         Constituency: (row.Constituency || row.constituency || '').trim(),
                         Candidate: (row.Candidate || row.candidate || '').trim()
                     };
+                    
+                    return normalized;
                 })
-                .filter(row => row.RegisteredVoters > 0 && row.Province && row.District);
+                .filter(row => row.RegisteredVoters > 0 && row.Province && row.District && row.Voters >= 0);
 
-            console.log("Normalized data:", normalizedData.length, "rows");
-            console.log("Sample normalized rows:", normalizedData.slice(0, 5));
-
-            // Group by District + Year and aggregate the voters
-            const aggregatedData = {};
+            console.log("Cleaned data:", allData.length, "rows");
+            console.log("Sample cleaned rows:", allData.slice(0, 5));
             
-            normalizedData.forEach(row => {
-                const key = `${row.District}-${row.Year}`;
-                
-                if (!aggregatedData[key]) {
-                    aggregatedData[key] = {
-                        Province: row.Province,
-                        District: row.District,
-                        Year: row.Year,
-                        RegisteredVoters: 0,
-                        Voters: 0, // This will be the sum of all voters in this district/year
-                        TurnoutN: 0,
-                        TurnoutPct: 0
-                    };
-                }
-                
-                // Sum up the voters and registered voters for this district/year combination
-                console.log(`Adding to ${key}: ${row.Voters} voters, ${row.RegisteredVoters} registered`);
-                aggregatedData[key].Voters += row.Voters;
-                aggregatedData[key].RegisteredVoters += row.RegisteredVoters;
-            });
-
-            console.log("Aggregation complete. Sample aggregated entries:");
-            Object.entries(aggregatedData).slice(0, 3).forEach(([key, value]) => {
-                console.log(`${key}: ${value.Voters} voters out of ${value.RegisteredVoters} registered`);
-            });
-
-            // Convert back to array and calculate turnout percentages
-            allData = Object.values(aggregatedData).map(row => {
-                row.TurnoutN = row.Voters; // Same as Voters
-                row.TurnoutPct = row.RegisteredVoters > 0 ? (row.Voters / row.RegisteredVoters * 100) : 0;
-                return row;
-            });
-
-            console.log("Aggregated data:", allData.length, "districts");
-            console.log("Sample aggregated data:", allData.slice(0, 3));
+            // Verify total calculation approach
+            const testYear = '2024';
+            const testData = allData.filter(row => row.Year === testYear);
+            const totalVotersSum = testData.reduce((sum, row) => sum + row.Voters, 0);
+            const totalRegisteredSum = testData.reduce((sum, row) => sum + row.RegisteredVoters, 0);
+            const overallTurnoutTest = totalRegisteredSum > 0 ? (totalVotersSum / totalRegisteredSum * 100) : 0;
+            
+            console.log(`=== CALCULATION VERIFICATION (${testYear}) ===`);
+            console.log(`Rows for ${testYear}:`, testData.length);
+            console.log(`Total Voters (sum of 'Voters' column):`, totalVotersSum.toLocaleString());
+            console.log(`Total Registered (sum of 'RegisteredVoters' column):`, totalRegisteredSum.toLocaleString());
+            console.log(`Overall Turnout Rate:`, overallTurnoutTest.toFixed(2), '%');
             
             if (allData.length === 0) {
                 document.getElementById('kpiSection').innerHTML = 
@@ -535,16 +492,6 @@
                 data = allData.filter(row => row.Year === selectedYear);
             }
             console.log(`Filtered data for year ${selectedYear}:`, data.length, "rows");
-            
-            // Debug info
-            if (data.length > 0) {
-                console.log("Sample filtered data with calculations:");
-                data.slice(0, 3).forEach(row => {
-                    console.log(`District: ${row.District}`);
-                    console.log(`  Registered: ${formatNumber(row.RegisteredVoters)}`);
-                    console.log(`  Actual Turnout: ${formatNumber(row.Voters)} (${row.TurnoutPct.toFixed(1)}%)`);
-                });
-            }
         }
 
         function updateAllVisualizations() {
@@ -555,30 +502,24 @@
         }
 
         function renderKPIs() {
+            // CRITICAL FIX: Direct summation of all filtered rows
+            // Each row represents a constituency/candidate/polling station
+            // Sum of 'Voters' column = total actual voter turnout
+            // Sum of 'RegisteredVoters' column = total registered voters
+            
             const totalRegisteredVoters = data.reduce((sum, row) => sum + row.RegisteredVoters, 0);
-            // FIXED: Use the Voters column directly for actual turnout
             const totalActualTurnout = data.reduce((sum, row) => sum + row.Voters, 0);
             
-            // Calculate overall turnout percentage correctly
             const overallTurnoutPct = totalRegisteredVoters > 0 ? (totalActualTurnout / totalRegisteredVoters * 100) : 0;
             const totalDistricts = new Set(data.map(row => row.District)).size;
 
-            // Debug logging with better aggregation info
-            console.log("=== KPI Calculation Debug ===");
-            console.log(`Data rows being processed: ${data.length}`);
-            console.log(`Total Registered (raw): ${totalRegisteredVoters}`);
-            console.log(`Total Actual Turnout (raw): ${totalActualTurnout}`);
-            console.log(`Total Registered (formatted): ${formatNumber(totalRegisteredVoters)}`);
-            console.log(`Total Actual Turnout (formatted): ${formatNumber(totalActualTurnout)}`);
-            console.log(`Overall Turnout %: ${overallTurnoutPct.toFixed(1)}%`);
-            
-            // Show sample district aggregations
-            if (data.length > 0) {
-                console.log("Sample district aggregations:");
-                data.slice(0, 3).forEach(d => {
-                    console.log(`${d.District}: ${d.Voters.toLocaleString()} voters out of ${d.RegisteredVoters.toLocaleString()} registered (${d.TurnoutPct.toFixed(1)}%)`);
-                });
-            }
+            console.log("=== KPI CALCULATION (CORRECTED) ===");
+            console.log(`Year filter: ${selectedYear || 'All Years'}`);
+            console.log(`Rows processed: ${data.length}`);
+            console.log(`Sum of 'RegisteredVoters' column: ${totalRegisteredVoters.toLocaleString()}`);
+            console.log(`Sum of 'Voters' column (actual turnout): ${totalActualTurnout.toLocaleString()}`);
+            console.log(`Turnout calculation: ${totalActualTurnout.toLocaleString()} ÷ ${totalRegisteredVoters.toLocaleString()} × 100 = ${overallTurnoutPct.toFixed(2)}%`);
+            console.log(`Unique districts: ${totalDistricts}`);
 
             document.getElementById('kpiSection').innerHTML = `
                 <div class="kpi-card voters">
@@ -599,16 +540,18 @@
                 </div>
             `;
             
-            // Add debug info in development
+            // Debug info
             const debugDiv = document.createElement('div');
             debugDiv.className = 'debug-info';
             debugDiv.innerHTML = `
-                <strong>Debug Info (${selectedYear || 'All Years'}):</strong><br>
-                Districts aggregated: ${totalDistricts} (from ${data.length} district-year combinations)<br>
-                Raw Totals: Registered=${totalRegisteredVoters.toLocaleString()}, Turnout=${totalActualTurnout.toLocaleString()}<br>
-                Formatted: Registered=${formatNumber(totalRegisteredVoters)}, Turnout=${formatNumber(totalActualTurnout)}<br>
-                Calculation: ${totalActualTurnout.toLocaleString()} ÷ ${totalRegisteredVoters.toLocaleString()} × 100 = ${overallTurnoutPct.toFixed(2)}%<br>
-                Note: Voters column was aggregated by district+year to avoid double counting
+                <strong>✅ CORRECTED Calculation (${selectedYear || 'All Years'}):</strong><br>
+                Data rows: ${data.length} (each row = constituency/candidate/polling station)<br>
+                <strong>DIRECT SUMMATION APPROACH:</strong><br>
+                • Total Registered = Sum of all 'RegisteredVoters' values = ${totalRegisteredVoters.toLocaleString()}<br>
+                • Total Turnout = Sum of all 'Voters' values = ${totalActualTurnout.toLocaleString()}<br>
+                • Turnout Rate = ${totalActualTurnout.toLocaleString()} ÷ ${totalRegisteredVoters.toLocaleString()} × 100 = ${overallTurnoutPct.toFixed(2)}%<br>
+                • Districts covered: ${totalDistricts}<br>
+                <em>Note: Each CSV row contributes its 'Voters' value to total turnout - no aggregation by district needed</em>
             `;
             document.getElementById('kpiSection').appendChild(debugDiv);
         }
@@ -617,20 +560,18 @@
             const provinces = [...new Set(data.map(row => row.Province))].filter(p => p);
             const provinceData = provinces.map(province => {
                 const rows = data.filter(r => r.Province === province);
+                // Direct summation approach for province-level data
                 const totalRegistered = rows.reduce((sum, r) => sum + r.RegisteredVoters, 0);
-                // FIXED: Use Voters column for actual turnout
                 const totalActualTurnout = rows.reduce((sum, r) => sum + r.Voters, 0);
                 const provinceTurnoutPct = totalRegistered > 0 ? (totalActualTurnout / totalRegistered * 100) : 0;
                 
                 return {
                     province,
-                    totalRegistered: totalRegistered / 1000000, // Convert to millions
-                    totalActualTurnout: totalActualTurnout / 1000000, // Convert to millions  
+                    totalRegistered: totalRegistered / 1000000,
+                    totalActualTurnout: totalActualTurnout / 1000000,  
                     turnoutPct: provinceTurnoutPct
                 };
             });
-
-            console.log("Province data for chart:", provinceData);
 
             // Destroy existing chart
             if (charts.provinceChart) {
@@ -764,8 +705,8 @@
             }
 
             const rows = data.filter(r => r.District === district);
+            // Direct summation for district-level data
             const totalRegistered = rows.reduce((sum, r) => sum + r.RegisteredVoters, 0);
-            // FIXED: Use Voters column for actual turnout
             const totalActualTurnout = rows.reduce((sum, r) => sum + r.Voters, 0);
             const districtTurnoutPct = totalRegistered > 0 ? (totalActualTurnout / totalRegistered * 100) : 0;
             const constituencies = rows.length;
@@ -786,7 +727,7 @@
                 </div>
                 <div class="stat-item">
                     <div class="stat-value">${constituencies}</div>
-                    <div class="stat-label">Constituencies</div>
+                    <div class="stat-label">Records</div>
                 </div>
             `;
             document.getElementById('districtStats').style.display = 'grid';
@@ -839,8 +780,8 @@
 
             const getStats = (district) => {
                 const rows = data.filter(r => r.District === district);
+                // Direct summation for comparison
                 const totalRegistered = rows.reduce((sum, r) => sum + r.RegisteredVoters, 0) / 1000000;
-                // FIXED: Use Voters column for actual turnout
                 const totalActualTurnout = rows.reduce((sum, r) => sum + r.Voters, 0) / 1000000;
                 const districtTurnoutPct = rows.reduce((sum, r) => sum + r.RegisteredVoters, 0) > 0 ? 
                     (rows.reduce((sum, r) => sum + r.Voters, 0) / rows.reduce((sum, r) => sum + r.RegisteredVoters, 0) * 100) : 0;
@@ -901,12 +842,30 @@
         }
 
         function renderTrendsChart() {
-            // Enhanced engagement analysis with concrete metrics
-            const totalDistricts = data.length;
+            // Direct summation for overall totals
             const totalRegisteredVoters = data.reduce((sum, row) => sum + row.RegisteredVoters, 0);
-            // FIXED: Use Voters column for actual turnout
             const totalActualTurnout = data.reduce((sum, row) => sum + row.Voters, 0);
             const overallTurnoutPct = totalRegisteredVoters > 0 ? (totalActualTurnout / totalRegisteredVoters * 100) : 0;
+            
+            // Group by district for engagement analysis
+            const districtGroups = {};
+            data.forEach(row => {
+                if (!districtGroups[row.District]) {
+                    districtGroups[row.District] = {
+                        registeredVoters: 0,
+                        actualTurnout: 0
+                    };
+                }
+                districtGroups[row.District].registeredVoters += row.RegisteredVoters;
+                districtGroups[row.District].actualTurnout += row.Voters;
+            });
+
+            // Calculate turnout rates for each district
+            const districtTurnoutRates = Object.values(districtGroups).map(district => {
+                return district.registeredVoters > 0 ? (district.actualTurnout / district.registeredVoters * 100) : 0;
+            });
+
+            const totalDistricts = districtTurnoutRates.length;
             
             // Group districts by turnout rate ranges for engagement analysis
             const ranges = [
@@ -917,20 +876,16 @@
             ];
 
             const engagementData = ranges.map(range => {
-                const districtsInRange = data.filter(row => 
-                    row.TurnoutPct >= range.min && row.TurnoutPct < range.max
+                const districtsInRange = districtTurnoutRates.filter(rate => 
+                    rate >= range.min && rate < range.max
                 );
-                const totalVotersInRange = districtsInRange.reduce((sum, row) => sum + row.RegisteredVoters, 0);
-                const totalActualTurnoutInRange = districtsInRange.reduce((sum, row) => sum + row.Voters, 0);
                 const avgTurnoutInRange = districtsInRange.length > 0 ?
-                    (districtsInRange.reduce((sum, row) => sum + row.TurnoutPct, 0) / districtsInRange.length) : 0;
+                    (districtsInRange.reduce((sum, rate) => sum + rate, 0) / districtsInRange.length) : 0;
                 
                 return {
                     label: range.label,
                     count: districtsInRange.length,
                     percentage: totalDistricts > 0 ? (districtsInRange.length / totalDistricts * 100) : 0,
-                    totalVoters: totalVotersInRange / 1000000,
-                    totalActualTurnout: totalActualTurnoutInRange / 1000000,
                     avgTurnout: avgTurnoutInRange,
                     color: range.color
                 };
@@ -996,8 +951,6 @@
                                     const data = engagementData[dataIndex];
                                     return [
                                         `Districts: ${data.count} (${data.percentage.toFixed(1)}%)`,
-                                        `Total Registered: ${formatNumber(data.totalVoters * 1000000)}`,
-                                        `Total Actual Turnout: ${formatNumber(data.totalActualTurnout * 1000000)}`,
                                         `Avg Turnout: ${data.avgTurnout.toFixed(1)}%`
                                     ];
                                 }
@@ -1072,13 +1025,14 @@
                         • Total actual voter turnout: <strong>${formatNumber(totalActualTurnout)}</strong> out of <strong>${formatNumber(totalRegisteredVoters)}</strong> registered voters
                     </div>
                     <div class="debug-info" style="margin-top: 15px;">
-                        <strong>Aggregation Verification:</strong><br>
-                        Districts processed: ${totalDistricts}<br>
-                        Total Registered Voters: ${totalRegisteredVoters.toLocaleString()}<br>
-                        Total Actual Turnout (aggregated from 'Voters' column): ${totalActualTurnout.toLocaleString()}<br>
-                        Overall Turnout Rate: ${totalActualTurnout.toLocaleString()} ÷ ${totalRegisteredVoters.toLocaleString()} × 100 = ${overallTurnoutPct.toFixed(2)}%<br>
-                        Sample District: ${data.slice(0, 1).map(d => `${d.District}: ${d.Voters.toLocaleString()} voters (${d.TurnoutPct.toFixed(1)}%)`).join(', ')}<br>
-                        Note: Data aggregated by District+Year to prevent double counting of voters
+                        <strong>✅ CORRECTED Turnout Calculation:</strong><br>
+                        CSV Rows processed: ${data.length} (each row contributes to turnout)<br>
+                        <strong>DIRECT SUMMATION METHOD:</strong><br>
+                        • Total Registered = Σ(RegisteredVoters column) = ${totalRegisteredVoters.toLocaleString()}<br>
+                        • Total Turnout = Σ(Voters column) = ${totalActualTurnout.toLocaleString()}<br>
+                        • Turnout Rate = ${totalActualTurnout.toLocaleString()} ÷ ${totalRegisteredVoters.toLocaleString()} × 100 = ${overallTurnoutPct.toFixed(2)}%<br>
+                        • Districts aggregated for engagement analysis: ${totalDistricts}<br>
+                        <strong>Key Fix:</strong> Each CSV row's 'Voters' value represents actual votes cast and is directly summed for total turnout
                     </div>
                 </div>
             `;
