@@ -2,157 +2,251 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pakistan Elections Dashboard</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/htmx.org@1.9.2"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Election Dashboard 2024</title>
+  <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    .tab { cursor: pointer; padding: 10px 20px; background: #f0f0f0; margin-right: 10px; border-radius: 6px 6px 0 0; display: inline-block; }
-    .tab.active { background: #0077b6; color: white; }
-    .tab-content { display: none; padding: 20px; border: 1px solid #ccc; border-top: none; }
-    .tab-content.active { display: block; }
-    canvas { max-width: 100%; margin-top: 20px; }
-    select { padding: 6px; margin: 10px 0; }
+    body {
+      font-family: "Segoe UI", sans-serif;
+      margin: 20px;
+      background-color: #fff;
+    }
+    .tab-buttons {
+      display: flex;
+      margin-bottom: 20px;
+    }
+    .tab-buttons button {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      background: #f0f0f0;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .tab-buttons button.active {
+      background: #0077b6;
+      color: white;
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    .dropdowns {
+      margin: 10px 0;
+    }
+    select {
+      padding: 6px;
+      margin-right: 10px;
+    }
+    #charts-container {
+      margin-top: 20px;
+    }
   </style>
 </head>
 <body>
-  <h1>Pakistan Elections Dashboard (2024)</h1>
-  <div>
-    <div class="tab active" onclick="switchTab('districtTab')">District Comparison</div>
-    <div class="tab" onclick="switchTab('provinceTab')">Province Overview</div>
+  <h1>📊 Pakistan Election 2024 - Interactive Dashboard</h1>
+
+  <div class="tab-buttons">
+    <button class="tab-btn active" data-tab="districtView">District View</button>
+    <button class="tab-btn" data-tab="comparisonView">District Comparison</button>
+    <button class="tab-btn" data-tab="provinceOverview">Province Overview</button>
   </div>
-  <div id="districtTab" class="tab-content active">
-    <label>District 1:</label>
-    <select id="district1"></select>
-    <label>District 2:</label>
-    <select id="district2"></select>
-    <canvas id="districtChart"></canvas>
+
+  <!-- Tab 1: District View -->
+  <div id="districtView" class="tab-content active">
+    <div class="dropdowns">
+      <label>Select District:</label>
+      <select id="districtSelect"></select>
+    </div>
+    <div id="districtChart"></div>
   </div>
-  <div id="provinceTab" class="tab-content">
-    <label>Province:</label>
-    <select id="provinceSelect"></select>
-    <canvas id="provinceChart"></canvas>
-    <h3>Top 3 Districts in Province</h3>
-    <canvas id="topDistrictsChart"></canvas>
+
+  <!-- Tab 2: District Comparison -->
+  <div id="comparisonView" class="tab-content">
+    <div class="dropdowns">
+      <label>District 1:</label>
+      <select id="district1"></select>
+      <label>District 2:</label>
+      <select id="district2"></select>
+    </div>
+    <div id="compareChart"></div>
+  </div>
+
+  <!-- Tab 3: Province Overview -->
+  <div id="provinceOverview" class="tab-content">
+    <div id="provinceChart"></div>
+    <div id="topDistricts"></div>
   </div>
 
   <script>
-    let data = []
-    let districts = new Set();
-    let provinces = new Set();
+    let data = [];
 
-    function switchTab(tabId) {
-      document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
-      document.querySelector(`.tab[onclick*="${tabId}"]`).classList.add('active');
-      document.getElementById(tabId).classList.add('active');
+    // Load CSV
+    Papa.parse("data.csv", {
+      header: true,
+      download: true,
+      complete: function(results) {
+        data = results.data;
+        initializeDashboard();
+      }
+    });
+
+    function initializeDashboard() {
+      const districts = [...new Set(data.map(d => d.District).filter(Boolean))].sort();
+      const provinces = [...new Set(data.map(d => d.Province).filter(Boolean))];
+
+      populateSelect("districtSelect", districts);
+      populateSelect("district1", districts);
+      populateSelect("district2", districts);
+
+      document.getElementById("districtSelect").addEventListener("change", renderDistrictChart);
+      document.getElementById("district1").addEventListener("change", renderCompareChart);
+      document.getElementById("district2").addEventListener("change", renderCompareChart);
+
+      renderDistrictChart(); // default
+      renderCompareChart(); // default
+      renderProvinceChart(); // default
     }
 
-    function parseCSV() {
-      Papa.parse("data.csv", {
-        download: true,
-        header: true,
-        complete: function(results) {
-          data = results.data.filter(d => d.Year === '2024');
-          data.forEach(row => {
-            districts.add(row.District);
-            provinces.add(row.Province);
-          });
-          populateDropdowns();
-          updateDistrictChart();
-          updateProvinceChart();
-        }
+    function populateSelect(id, options) {
+      const sel = document.getElementById(id);
+      sel.innerHTML = options.map(opt => `<option value="${opt}">${opt}</option>`).join("");
+    }
+
+    function renderDistrictChart() {
+      const district = document.getElementById("districtSelect").value;
+      const filtered = data.filter(d => d.District === district && d.Year && d["Registered Voters"]);
+
+      const years = filtered.map(d => d.Year);
+      const reg = filtered.map(d => +d["Registered Voters"]);
+      const turnout = filtered.map(d => +d["Turnout N"]);
+      const pct = turnout.map((t, i) => (reg[i] ? (t / reg[i]) * 100 : 0));
+
+      const traces = [
+        { x: years, y: reg, type: 'bar', name: 'Registered Voters' },
+        { x: years, y: turnout, type: 'bar', name: 'Voter Turnout' },
+        { x: years, y: pct, type: 'line', name: '% Turnout', yaxis: 'y2' }
+      ];
+
+      Plotly.newPlot("districtChart", traces, {
+        title: `${district} - Year-wise Stats`,
+        yaxis: { title: "Count" },
+        yaxis2: {
+          overlaying: 'y',
+          side: 'right',
+          title: "% Turnout",
+          tickformat: ".1f"
+        },
+        barmode: "group"
       });
     }
 
-    function populateDropdowns() {
-      const d1 = document.getElementById("district1");
-      const d2 = document.getElementById("district2");
-      const provinceSelect = document.getElementById("provinceSelect");
-      districts = Array.from(districts).sort();
-      provinces = Array.from(provinces).sort();
-
-      districts.forEach(d => {
-        const opt1 = new Option(d, d);
-        const opt2 = new Option(d, d);
-        d1.appendChild(opt1);
-        d2.appendChild(opt2);
-      });
-      provinces.forEach(p => {
-        const opt = new Option(p, p);
-        provinceSelect.appendChild(opt);
-      });
-
-      d1.onchange = updateDistrictChart;
-      d2.onchange = updateDistrictChart;
-      provinceSelect.onchange = updateProvinceChart;
-    }
-
-    function updateDistrictChart() {
+    function renderCompareChart() {
       const d1 = document.getElementById("district1").value;
       const d2 = document.getElementById("district2").value;
-      const chartData = [d1, d2].map(d => {
-        const rows = data.filter(row => row.District === d);
-        const reg = rows.reduce((acc, r) => acc + (+r["Registered Voters"] || 0), 0);
-        const turnout = rows.reduce((acc, r) => acc + (+r["Turnout N"] || 0), 0);
-        const percent = reg ? (turnout / reg * 100).toFixed(1) : 0;
-        return { district: d, reg, turnout, percent };
-      });
+      const years = [...new Set(data.map(d => d.Year))].filter(Boolean);
 
-      new Chart(document.getElementById("districtChart"), {
-        type: 'bar',
-        data: {
-          labels: ["Registered Voters", "Voters Turnout", "% Turnout"],
-          datasets: chartData.map((c, i) => ({
-            label: c.district,
-            data: [c.reg, c.turnout, c.percent],
-          }))
+      const getSeries = (district) => {
+        const f = data.filter(d => d.District === district && d.Year);
+        const byYear = years.map(y => f.find(d => d.Year == y) || {});
+        return {
+          reg: byYear.map(d => +d["Registered Voters"] || 0),
+          turnout: byYear.map(d => +d["Turnout N"] || 0),
+          pct: byYear.map((d, i) => d["Registered Voters"] ? (+d["Turnout N"] / +d["Registered Voters"]) * 100 : 0)
+        };
+      };
+
+      const d1Data = getSeries(d1);
+      const d2Data = getSeries(d2);
+
+      const traces = [
+        { x: years, y: d1Data.reg, type: "bar", name: `${d1} - Reg` },
+        { x: years, y: d2Data.reg, type: "bar", name: `${d2} - Reg` },
+        { x: years, y: d1Data.turnout, type: "bar", name: `${d1} - Turnout` },
+        { x: years, y: d2Data.turnout, type: "bar", name: `${d2} - Turnout` },
+        { x: years, y: d1Data.pct, type: "line", name: `${d1} %`, yaxis: 'y2' },
+        { x: years, y: d2Data.pct, type: "line", name: `${d2} %`, yaxis: 'y2' }
+      ];
+
+      Plotly.newPlot("compareChart", traces, {
+        title: `${d1} vs ${d2} - KPIs`,
+        yaxis: { title: "Count" },
+        yaxis2: {
+          overlaying: 'y',
+          side: 'right',
+          title: "% Turnout",
+          tickformat: ".1f"
         },
-        options: { responsive: true }
+        barmode: "group"
       });
     }
 
-    function updateProvinceChart() {
-      const selectedProvince = document.getElementById("provinceSelect").value;
-      const rows = data.filter(row => row.Province === selectedProvince);
-      const reg = rows.reduce((acc, r) => acc + (+r["Registered Voters"] || 0), 0);
-      const turnout = rows.reduce((acc, r) => acc + (+r["Turnout N"] || 0), 0);
-      const percent = reg ? (turnout / reg * 100).toFixed(1) : 0;
+    function renderProvinceChart() {
+      const filtered = data.filter(d => d.Year == 2024 && d.Province && d["Registered Voters"]);
 
-      new Chart(document.getElementById("provinceChart"), {
-        type: 'bar',
-        data: {
-          labels: ["Registered Voters", "Voters Turnout", "% Turnout"],
-          datasets: [{ label: selectedProvince, data: [reg, turnout, percent] }]
+      const grouped = {};
+      filtered.forEach(d => {
+        const p = d.Province;
+        if (!grouped[p]) grouped[p] = { reg: 0, turnout: 0 };
+        grouped[p].reg += +d["Registered Voters"] || 0;
+        grouped[p].turnout += +d["Turnout N"] || 0;
+      });
+
+      const provinces = Object.keys(grouped);
+      const reg = provinces.map(p => grouped[p].reg);
+      const turnout = provinces.map(p => grouped[p].turnout);
+      const pct = provinces.map((p, i) => (reg[i] ? (turnout[i] / reg[i]) * 100 : 0));
+
+      const traces = [
+        { x: provinces, y: reg, type: 'bar', name: 'Registered' },
+        { x: provinces, y: turnout, type: 'bar', name: 'Turnout' },
+        { x: provinces, y: pct, type: 'line', name: '% Turnout', yaxis: 'y2' }
+      ];
+
+      Plotly.newPlot("provinceChart", traces, {
+        title: "Province-wise 2024 Overview",
+        yaxis: { title: "Count" },
+        yaxis2: {
+          overlaying: 'y',
+          side: 'right',
+          title: "% Turnout",
+          tickformat: ".1f"
         },
-        options: { responsive: true }
+        barmode: "group"
       });
 
-      const topDistricts = {};
-      rows.forEach(r => {
-        const d = r.District;
-        if (!topDistricts[d]) topDistricts[d] = { reg: 0, turnout: 0 };
-        topDistricts[d].reg += +r["Registered Voters"] || 0;
-        topDistricts[d].turnout += +r["Turnout N"] || 0;
+      // Top 3 districts per province
+      let html = "";
+      provinces.forEach(p => {
+        const entries = filtered.filter(d => d.Province === p);
+        const sorted = entries.sort((a, b) => (+b["Turnout N"]) - (+a["Turnout N"])).slice(0, 3);
+        html += `<h3>${p} - Top 3 Districts (by Turnout)</h3><ul>`;
+        sorted.forEach(d => {
+          const percent = (+d["Turnout N"] / +d["Registered Voters"]) * 100;
+          html += `<li>${d.District}: Reg ${d["Registered Voters"]}, Turnout ${d["Turnout N"]}, % ${percent.toFixed(1)}</li>`;
+        });
+        html += `</ul>`;
       });
 
-      const top = Object.entries(topDistricts)
-        .map(([d, v]) => ({ district: d, reg: v.reg, turnout: v.turnout, percent: v.reg ? (v.turnout / v.reg * 100).toFixed(1) : 0 }))
-        .sort((a, b) => b.reg - a.reg).slice(0, 3);
-
-      new Chart(document.getElementById("topDistrictsChart"), {
-        type: 'bar',
-        data: {
-          labels: ["Registered Voters", "Voters Turnout", "% Turnout"],
-          datasets: top.map(td => ({ label: td.district, data: [td.reg, td.turnout, td.percent] }))
-        },
-        options: { responsive: true }
-      });
+      document.getElementById("topDistricts").innerHTML = html;
     }
 
-    window.onload = parseCSV;
+    // Tabs functionality
+    document.querySelectorAll(".tab-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+
+        const tab = btn.getAttribute("data-tab");
+        document.querySelectorAll(".tab-content").forEach(tc => {
+          tc.classList.remove("active");
+        });
+        document.getElementById(tab).classList.add("active");
+      });
+    });
   </script>
 </body>
 </html>
