@@ -8,70 +8,286 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
-            font-family: 'Segoe UI', sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #f8f9fa;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
         }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            border-radius: 15px;
+            overflow: hidden;
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .header {
+            background: linear-gradient(45deg, #2c5530, #4a7c59);
+            color: white;
+            padding: 25px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5rem;
+            font-weight: 300;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            padding: 25px;
+            background: #f8f9fa;
+        }
+        
+        .kpi-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            text-align: center;
+            border-left: 5px solid;
+            transition: transform 0.3s ease;
+        }
+        
+        .kpi-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .kpi-card.voters { border-left-color: #007bff; }
+        .kpi-card.turnout { border-left-color: #28a745; }
+        .kpi-card.percentage { border-left-color: #ffc107; }
+        .kpi-card.districts { border-left-color: #6f42c1; }
+        
+        .kpi-value {
+            font-size: 2.2rem;
+            font-weight: bold;
+            color: #2c3e50;
+            margin: 10px 0;
+        }
+        
+        .kpi-label {
+            font-size: 0.9rem;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
         .tabs {
             display: flex;
             background-color: #ffffff;
-            border-bottom: 2px solid #dee2e6;
+            border-bottom: 3px solid #dee2e6;
+            overflow-x: auto;
         }
+        
         .tab {
-            padding: 15px 25px;
+            padding: 18px 30px;
             cursor: pointer;
-            font-weight: bold;
+            font-weight: 600;
             border-right: 1px solid #dee2e6;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+            color: #495057;
         }
-        .tab.active {
+        
+        .tab:hover {
             background-color: #e9ecef;
         }
+        
+        .tab.active {
+            background: linear-gradient(45deg, #2c5530, #4a7c59);
+            color: white;
+            box-shadow: inset 0 -3px 0 #28a745;
+        }
+        
         .tab-content {
             display: none;
-            padding: 20px;
+            padding: 30px;
         }
+        
         .tab-content.active {
             display: block;
         }
+        
+        .chart-container {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            margin: 20px 0;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .control-group label {
+            font-weight: 600;
+            color: #495057;
+            font-size: 0.9rem;
+        }
+        
+        select {
+            padding: 12px 16px;
+            font-size: 16px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            background: white;
+            transition: border-color 0.3s ease;
+            min-width: 200px;
+        }
+        
+        select:focus {
+            outline: none;
+            border-color: #4a7c59;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        
+        .stat-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        
+        .stat-label {
+            font-size: 0.85rem;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+        
         canvas {
             max-width: 100%;
+            height: 400px !important;
         }
-        select {
-            padding: 8px;
-            margin: 10px 0;
-            font-size: 16px;
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+        
+        @media (max-width: 768px) {
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            select {
+                min-width: unset;
+            }
+            
+            .kpi-grid {
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            }
         }
     </style>
 </head>
 <body>
-    <div class="tabs">
-        <div class="tab active" data-tab="province">Province Overview</div>
-        <div class="tab" data-tab="district">District View</div>
-        <div class="tab" data-tab="compare">Compare Districts</div>
-    </div>
+    <div class="container">
+        <div class="header">
+            <h1>🇵🇰 Pakistan Election Dashboard 2024</h1>
+        </div>
+        
+        <div class="kpi-grid" id="kpiSection">
+            <div class="loading">Loading election data...</div>
+        </div>
 
-    <div class="tab-content active" id="province">
-        <h2>Province Overview (2024)</h2>
-        <canvas id="provinceChart"></canvas>
-    </div>
+        <div class="tabs">
+            <div class="tab active" data-tab="province">🏛️ Province Overview</div>
+            <div class="tab" data-tab="district">🏙️ District Analysis</div>
+            <div class="tab" data-tab="compare">⚖️ District Comparison</div>
+            <div class="tab" data-tab="trends">📊 Engagement Trends</div>
+        </div>
 
-    <div class="tab-content" id="district">
-        <h2>District View (2024)</h2>
-        <select id="districtSelect"></select>
-        <canvas id="districtChart"></canvas>
-    </div>
+        <div class="tab-content active" id="province">
+            <h2>Province-wise Electoral Performance</h2>
+            <div class="chart-container">
+                <canvas id="provinceChart"></canvas>
+            </div>
+        </div>
 
-    <div class="tab-content" id="compare">
-        <h2>Compare Two Districts (2024)</h2>
-        <label>District 1:</label>
-        <select id="compare1"></select>
-        <label>District 2:</label>
-        <select id="compare2"></select>
-        <canvas id="compareChart"></canvas>
+        <div class="tab-content" id="district">
+            <h2>District-level Analysis</h2>
+            <div class="controls">
+                <div class="control-group">
+                    <label for="districtSelect">Select District:</label>
+                    <select id="districtSelect">
+                        <option value="">Choose a district...</option>
+                    </select>
+                </div>
+            </div>
+            <div class="stats-grid" id="districtStats" style="display: none;"></div>
+            <div class="chart-container">
+                <canvas id="districtChart"></canvas>
+            </div>
+        </div>
+
+        <div class="tab-content" id="compare">
+            <h2>District Comparison Analysis</h2>
+            <div class="controls">
+                <div class="control-group">
+                    <label for="compare1">First District:</label>
+                    <select id="compare1">
+                        <option value="">Choose first district...</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="compare2">Second District:</label>
+                    <select id="compare2">
+                        <option value="">Choose second district...</option>
+                    </select>
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="compareChart"></canvas>
+            </div>
+        </div>
+
+        <div class="tab-content" id="trends">
+            <h2>Voter Engagement Analysis</h2>
+            <div class="chart-container">
+                <canvas id="trendsChart"></canvas>
+            </div>
+        </div>
     </div>
 
     <script>
+        // Global variables
+        let data = [];
+        let charts = {};
+
+        // Initialize tabs
         const tabs = document.querySelectorAll('.tab');
         const contents = document.querySelectorAll('.tab-content');
 
@@ -85,76 +301,198 @@
             });
         });
 
-        let data = [];
+        // Utility functions
+        function formatNumber(num) {
+            if (num >= 1000000) {
+                return (num / 1000000).toFixed(1) + 'M';
+            } else if (num >= 1000) {
+                return (num / 1000).toFixed(1) + 'K';
+            }
+            return num.toLocaleString();
+        }
 
+        function parseNumberSafe(str) {
+            const cleaned = str ? str.toString().replace(/[^\d.-]/g, '') : '0';
+            const num = parseFloat(cleaned);
+            return isNaN(num) ? 0 : num;
+        }
+
+        function calculateTurnoutRate(turnout, registered) {
+            return registered > 0 ? (turnout / registered * 100) : 0;
+        }
+
+        // Load and process data
         Papa.parse("data.csv", {
             header: true,
             download: true,
+            skipEmptyLines: true,
+            dynamicTyping: false,
             complete: function(results) {
-                data = results.data.filter(row => row.Year === "2024" && row["Registered Voters"]);
+                console.log("Raw data loaded:", results.data.length, "rows");
+                
+                // Filter and clean data for 2024
+                data = results.data
+                    .filter(row => row.Year === "2024" || row.year === "2024")
+                    .filter(row => row["Registered Voters"] || row["registered_voters"])
+                    .map(row => {
+                        // Normalize column names and parse numbers
+                        const normalized = {
+                            Province: row.Province || row.province || '',
+                            District: row.District || row.district || '',
+                            Year: row.Year || row.year || '2024',
+                            RegisteredVoters: parseNumberSafe(row["Registered Voters"] || row.registered_voters || row.RegisteredVoters),
+                            TurnoutN: parseNumberSafe(row["Turnout N"] || row.turnout_n || row.TurnoutN || row.Turnout),
+                            TurnoutPct: parseNumberSafe(row["Turnout %"] || row.turnout_pct || row.TurnoutPct)
+                        };
+                        
+                        // Calculate turnout percentage if missing
+                        if (!normalized.TurnoutPct && normalized.RegisteredVoters > 0) {
+                            normalized.TurnoutPct = calculateTurnoutRate(normalized.TurnoutN, normalized.RegisteredVoters);
+                        }
+                        
+                        return normalized;
+                    })
+                    .filter(row => row.RegisteredVoters > 0); // Only keep rows with voter data
+
+                console.log("Processed data:", data.length, "rows");
+                
+                if (data.length === 0) {
+                    document.getElementById('kpiSection').innerHTML = 
+                        '<div style="text-align: center; color: #dc3545; padding: 40px;">No valid election data found. Please check your CSV file format.</div>';
+                    return;
+                }
+
+                // Initialize dashboard
+                renderKPIs();
                 renderProvinceChart();
                 populateDistrictDropdowns();
+                renderTrendsChart();
+            },
+            error: function(error) {
+                console.error("Error loading data:", error);
+                document.getElementById('kpiSection').innerHTML = 
+                    '<div style="text-align: center; color: #dc3545; padding: 40px;">Error loading data. Please ensure data.csv exists and is properly formatted.</div>';
             }
         });
 
+        function renderKPIs() {
+            const totalVoters = data.reduce((sum, row) => sum + row.RegisteredVoters, 0);
+            const totalTurnout = data.reduce((sum, row) => sum + row.TurnoutN, 0);
+            const avgTurnoutPct = data.length > 0 ? 
+                (data.reduce((sum, row) => sum + row.TurnoutPct, 0) / data.length) : 0;
+            const totalDistricts = new Set(data.map(row => row.District)).size;
+
+            document.getElementById('kpiSection').innerHTML = `
+                <div class="kpi-card voters">
+                    <div class="kpi-value">${formatNumber(totalVoters)}</div>
+                    <div class="kpi-label">Total Registered Voters</div>
+                </div>
+                <div class="kpi-card turnout">
+                    <div class="kpi-value">${formatNumber(totalTurnout)}</div>
+                    <div class="kpi-label">Total Voter Turnout</div>
+                </div>
+                <div class="kpi-card percentage">
+                    <div class="kpi-value">${avgTurnoutPct.toFixed(1)}%</div>
+                    <div class="kpi-label">Average Turnout Rate</div>
+                </div>
+                <div class="kpi-card districts">
+                    <div class="kpi-value">${totalDistricts}</div>
+                    <div class="kpi-label">Total Districts</div>
+                </div>
+            `;
+        }
+
         function renderProvinceChart() {
-            const provinces = [...new Set(data.map(row => row.Province))];
+            const provinces = [...new Set(data.map(row => row.Province))].filter(p => p);
             const provinceData = provinces.map(province => {
                 const rows = data.filter(r => r.Province === province);
-                const totalVoters = rows.reduce((sum, r) => sum + parseInt(r["Registered Voters"] || 0), 0);
-                const totalTurnout = rows.reduce((sum, r) => sum + parseInt(r["Turnout N"] || 0), 0);
-                const turnoutPct = totalVoters ? (totalTurnout / totalVoters * 100).toFixed(2) : 0;
+                const totalVoters = rows.reduce((sum, r) => sum + r.RegisteredVoters, 0);
+                const totalTurnout = rows.reduce((sum, r) => sum + r.TurnoutN, 0);
+                const avgTurnoutPct = rows.length > 0 ? 
+                    (rows.reduce((sum, r) => sum + r.TurnoutPct, 0) / rows.length) : 0;
+                
                 return {
                     province,
-                    totalVoters,
-                    totalTurnout,
-                    turnoutPct
+                    totalVoters: totalVoters / 1000000, // Convert to millions
+                    totalTurnout: totalTurnout / 1000000, // Convert to millions
+                    turnoutPct: avgTurnoutPct
                 };
             });
 
+            // Destroy existing chart
+            if (charts.provinceChart) {
+                charts.provinceChart.destroy();
+            }
+
             const ctx = document.getElementById("provinceChart").getContext("2d");
-            new Chart(ctx, {
+            charts.provinceChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
                     labels: provinceData.map(d => d.province),
                     datasets: [
                         {
-                            label: 'Registered Voters',
+                            label: 'Registered Voters (Millions)',
                             data: provinceData.map(d => d.totalVoters),
-                            backgroundColor: '#007bff'
+                            backgroundColor: 'rgba(0, 123, 255, 0.8)',
+                            borderColor: 'rgba(0, 123, 255, 1)',
+                            borderWidth: 1,
+                            yAxisID: 'y'
                         },
                         {
-                            label: 'Voter Turnout',
+                            label: 'Voter Turnout (Millions)',
                             data: provinceData.map(d => d.totalTurnout),
-                            backgroundColor: '#28a745'
+                            backgroundColor: 'rgba(40, 167, 69, 0.8)',
+                            borderColor: 'rgba(40, 167, 69, 1)',
+                            borderWidth: 1,
+                            yAxisID: 'y'
                         },
                         {
-                            label: 'Turnout %',
+                            label: 'Turnout Rate (%)',
                             data: provinceData.map(d => d.turnoutPct),
-                            backgroundColor: '#ffc107',
-                            yAxisID: 'percentage'
+                            backgroundColor: 'rgba(255, 193, 7, 0.8)',
+                            borderColor: 'rgba(255, 193, 7, 1)',
+                            borderWidth: 1,
+                            type: 'line',
+                            yAxisID: 'y1'
                         }
                     ]
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        intersect: false,
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Provincial Electoral Statistics (2024)'
+                        }
+                    },
                     scales: {
                         y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
                             beginAtZero: true,
                             title: {
                                 display: true,
-                                text: 'Counts'
+                                text: 'Voters (Millions)'
                             }
                         },
-                        percentage: {
-                            beginAtZero: true,
+                        y1: {
+                            type: 'linear',
+                            display: true,
                             position: 'right',
+                            beginAtZero: true,
+                            max: 100,
                             title: {
                                 display: true,
-                                text: '% Turnout'
+                                text: 'Turnout Rate (%)'
                             },
-                            min: 0,
-                            max: 100
+                            grid: {
+                                drawOnChartArea: false,
+                            },
                         }
                     }
                 }
@@ -162,91 +500,236 @@
         }
 
         function populateDistrictDropdowns() {
-            const districts = [...new Set(data.map(row => row.District))].sort();
+            const districts = [...new Set(data.map(row => row.District))].filter(d => d).sort();
             const districtSelect = document.getElementById("districtSelect");
             const compare1 = document.getElementById("compare1");
             const compare2 = document.getElementById("compare2");
 
-            districts.forEach(d => {
-                const opt1 = new Option(d, d);
-                const opt2 = new Option(d, d);
-                const opt3 = new Option(d, d);
-                districtSelect.add(opt1);
-                compare1.add(opt2);
-                compare2.add(opt3);
+            // Clear existing options
+            [districtSelect, compare1, compare2].forEach(select => {
+                while (select.children.length > 1) {
+                    select.removeChild(select.lastChild);
+                }
             });
 
+            // Populate dropdowns
+            districts.forEach(district => {
+                districtSelect.add(new Option(district, district));
+                compare1.add(new Option(district, district));
+                compare2.add(new Option(district, district));
+            });
+
+            // District selection handler
             districtSelect.addEventListener('change', () => {
                 const district = districtSelect.value;
+                if (!district) return;
+
                 const rows = data.filter(r => r.District === district);
-                const totalVoters = rows.reduce((sum, r) => sum + parseInt(r["Registered Voters"] || 0), 0);
-                const totalTurnout = rows.reduce((sum, r) => sum + parseInt(r["Turnout N"] || 0), 0);
-                const turnoutPct = totalVoters ? (totalTurnout / totalVoters * 100).toFixed(2) : 0;
+                const totalVoters = rows.reduce((sum, r) => sum + r.RegisteredVoters, 0);
+                const totalTurnout = rows.reduce((sum, r) => sum + r.TurnoutN, 0);
+                const avgTurnoutPct = rows.length > 0 ? 
+                    (rows.reduce((sum, r) => sum + r.TurnoutPct, 0) / rows.length) : 0;
+                const constituencies = rows.length;
+
+                // Update stats
+                document.getElementById('districtStats').innerHTML = `
+                    <div class="stat-item">
+                        <div class="stat-value">${formatNumber(totalVoters)}</div>
+                        <div class="stat-label">Registered Voters</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">${formatNumber(totalTurnout)}</div>
+                        <div class="stat-label">Total Turnout</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">${avgTurnoutPct.toFixed(1)}%</div>
+                        <div class="stat-label">Turnout Rate</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">${constituencies}</div>
+                        <div class="stat-label">Constituencies</div>
+                    </div>
+                `;
+                document.getElementById('districtStats').style.display = 'grid';
+
+                // Render chart
+                if (charts.districtChart) {
+                    charts.districtChart.destroy();
+                }
 
                 const ctx = document.getElementById("districtChart").getContext("2d");
-                new Chart(ctx, {
-                    type: 'bar',
+                charts.districtChart = new Chart(ctx, {
+                    type: 'doughnut',
                     data: {
-                        labels: ['Registered Voters', 'Voter Turnout', 'Turnout %'],
+                        labels: ['Voted', 'Did Not Vote'],
                         datasets: [{
-                            label: district,
-                            data: [totalVoters, totalTurnout, turnoutPct],
-                            backgroundColor: ['#007bff', '#28a745', '#ffc107']
+                            data: [totalTurnout, totalVoters - totalTurnout],
+                            backgroundColor: ['#28a745', '#dc3545'],
+                            borderWidth: 2
                         }]
                     },
                     options: {
                         responsive: true,
-                        scales: {
-                            y: {
-                                beginAtZero: true
+                        maintainAspectRatio: false,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: `Voter Participation in ${district}`
                             }
                         }
                     }
                 });
             });
 
-            [compare1, compare2].forEach(el => {
-                el.addEventListener('change', () => {
-                    const d1 = compare1.value;
-                    const d2 = compare2.value;
-                    const getStats = (district) => {
-                        const rows = data.filter(r => r.District === district);
-                        const totalVoters = rows.reduce((sum, r) => sum + parseInt(r["Registered Voters"] || 0), 0);
-                        const totalTurnout = rows.reduce((sum, r) => sum + parseInt(r["Turnout N"] || 0), 0);
-                        const turnoutPct = totalVoters ? (totalTurnout / totalVoters * 100).toFixed(2) : 0;
-                        return [totalVoters, totalTurnout, turnoutPct];
-                    };
-                    const stats1 = getStats(d1);
-                    const stats2 = getStats(d2);
+            // Comparison handler
+            function updateComparison() {
+                const d1 = compare1.value;
+                const d2 = compare2.value;
+                if (!d1 || !d2) return;
 
-                    const ctx = document.getElementById("compareChart").getContext("2d");
-                    new Chart(ctx, {
-                        type: 'bar',
-                        data: {
-                            labels: ['Registered Voters', 'Voter Turnout', 'Turnout %'],
-                            datasets: [
-                                {
-                                    label: d1,
-                                    data: stats1,
-                                    backgroundColor: '#007bff'
-                                },
-                                {
-                                    label: d2,
-                                    data: stats2,
-                                    backgroundColor: '#28a745'
-                                }
-                            ]
+                const getStats = (district) => {
+                    const rows = data.filter(r => r.District === district);
+                    const totalVoters = rows.reduce((sum, r) => sum + r.RegisteredVoters, 0) / 1000000;
+                    const totalTurnout = rows.reduce((sum, r) => sum + r.TurnoutN, 0) / 1000000;
+                    const avgTurnoutPct = rows.length > 0 ? 
+                        (rows.reduce((sum, r) => sum + r.TurnoutPct, 0) / rows.length) : 0;
+                    return [totalVoters, totalTurnout, avgTurnoutPct];
+                };
+
+                const stats1 = getStats(d1);
+                const stats2 = getStats(d2);
+
+                if (charts.compareChart) {
+                    charts.compareChart.destroy();
+                }
+
+                const ctx = document.getElementById("compareChart").getContext("2d");
+                charts.compareChart = new Chart(ctx, {
+                    type: 'radar',
+                    data: {
+                        labels: ['Registered Voters (M)', 'Turnout (M)', 'Turnout Rate (%)'],
+                        datasets: [
+                            {
+                                label: d1,
+                                data: stats1,
+                                backgroundColor: 'rgba(0, 123, 255, 0.2)',
+                                borderColor: 'rgba(0, 123, 255, 1)',
+                                pointBackgroundColor: 'rgba(0, 123, 255, 1)',
+                                pointBorderColor: '#fff',
+                                pointHoverBackgroundColor: '#fff',
+                                pointHoverBorderColor: 'rgba(0, 123, 255, 1)'
+                            },
+                            {
+                                label: d2,
+                                data: stats2,
+                                backgroundColor: 'rgba(40, 167, 69, 0.2)',
+                                borderColor: 'rgba(40, 167, 69, 1)',
+                                pointBackgroundColor: 'rgba(40, 167, 69, 1)',
+                                pointBorderColor: '#fff',
+                                pointHoverBackgroundColor: '#fff',
+                                pointHoverBorderColor: 'rgba(40, 167, 69, 1)'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        elements: {
+                            line: {
+                                borderWidth: 3
+                            }
                         },
-                        options: {
-                            responsive: true,
-                            scales: {
-                                y: {
-                                    beginAtZero: true
-                                }
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: `District Comparison: ${d1} vs ${d2}`
                             }
                         }
-                    });
+                    }
                 });
+            }
+
+            compare1.addEventListener('change', updateComparison);
+            compare2.addEventListener('change', updateComparison);
+        }
+
+        function renderTrendsChart() {
+            // Group districts by turnout rate ranges for engagement analysis
+            const ranges = [
+                { min: 0, max: 30, label: 'Low (0-30%)', color: '#dc3545' },
+                { min: 30, max: 50, label: 'Medium (30-50%)', color: '#ffc107' },
+                { min: 50, max: 70, label: 'Good (50-70%)', color: '#17a2b8' },
+                { min: 70, max: 100, label: 'Excellent (70%+)', color: '#28a745' }
+            ];
+
+            const engagementData = ranges.map(range => {
+                const districtsInRange = data.filter(row => 
+                    row.TurnoutPct >= range.min && row.TurnoutPct < range.max
+                );
+                return {
+                    label: range.label,
+                    count: districtsInRange.length,
+                    totalVoters: districtsInRange.reduce((sum, row) => sum + row.RegisteredVoters, 0) / 1000000,
+                    color: range.color
+                };
+            });
+
+            const ctx = document.getElementById("trendsChart").getContext("2d");
+            charts.trendsChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: engagementData.map(d => d.label),
+                    datasets: [
+                        {
+                            label: 'Number of Districts',
+                            data: engagementData.map(d => d.count),
+                            backgroundColor: engagementData.map(d => d.color),
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Total Registered Voters (M)',
+                            data: engagementData.map(d => d.totalVoters),
+                            backgroundColor: 'rgba(108, 117, 125, 0.6)',
+                            yAxisID: 'y1',
+                            type: 'line'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Voter Engagement Distribution Across Districts'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Number of Districts'
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Registered Voters (Millions)'
+                            },
+                            grid: {
+                                drawOnChartArea: false,
+                            },
+                        }
+                    }
+                }
             });
         }
     </script>
