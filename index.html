@@ -492,24 +492,25 @@
         }
 
         function renderProvinceChart() {
-            const provinces = [...new Set(data.map(row => row.Province))].filter(p => p);
-            const provinceData = provinces.map(province => {
-                const rows = data.filter(r => r.Province === province);
-                const totalVoters = rows.reduce((sum, r) => sum + r.RegisteredVoters, 0);
-                const totalTurnout = rows.reduce((sum, r) => sum + r.TurnoutN, 0);
-                // Calculate turnout percentage for the province
-                const provinceAverageTurnoutPct = totalVoters > 0 ? (totalTurnout / totalVoters * 100) : 0;
-                
-                return {
-                    province,
-                    totalVoters: totalVoters / 1000000, // Convert to millions
-                    totalTurnout: totalTurnout / 1000000, // Convert to millions  
-                    turnoutPct: provinceAverageTurnoutPct
-                };
-            });
+    const provinces = [...new Set(data.map(row => row.Province))].filter(p => p);
+    const provinceData = provinces.map(province => {
+        const rows = data.filter(r => r.Province === province);
+        const totalVoters = rows.reduce((sum, r) => sum + parseInt(r.RegisteredVoters), 0);
+        const totalTurnout = rows.reduce((sum, r) => sum + parseInt(r.TurnoutN), 0);
 
-            console.log("Province data for chart:", provinceData); // Debug log
+        // Calculate turnout percentage for the province
+        const provinceAverageTurnoutPct = totalVoters > 0 ? (totalTurnout / totalVoters * 100).toFixed(2) : 0;
 
+        return {
+            province,
+            totalVoters: totalVoters / 1000000, // Convert to millions
+            totalTurnout: totalTurnout / 1000000, // Convert to millions
+            turnoutPct: provinceAverageTurnoutPct
+        };
+    });
+
+    console.log("Province data for chart:", provinceData); // Debug log
+}
             // Destroy existing chart
             if (charts.provinceChart) {
                 charts.provinceChart.destroy();
@@ -937,3 +938,4 @@
     </script>
 </body>
 </html>
+
