@@ -351,12 +351,13 @@
                             RegisteredVoters: baseVoters,
                             Voters: actualTurnout,
                             TurnoutN: actualTurnout,
-                            TurnoutPct: turnoutRate * 100
+                            TurnoutPct: (actualTurnout / baseVoters) * 100 // Ensure it's calculated properly
                         });
                     });
                 }
             });
 
+            console.log("Generated sample data:", sampleData.slice(0, 5)); // Debug log
             return sampleData;
         }
 
@@ -465,8 +466,9 @@
         function renderKPIs() {
             const totalVoters = data.reduce((sum, row) => sum + row.RegisteredVoters, 0);
             const totalTurnout = data.reduce((sum, row) => sum + row.TurnoutN, 0);
-            const avgTurnoutPct = data.length > 0 ? 
-                (data.reduce((sum, row) => sum + row.TurnoutPct, 0) / data.length) : 0;
+            
+            // Calculate average turnout rate properly - overall turnout percentage
+            const avgTurnoutPct = totalVoters > 0 ? (totalTurnout / totalVoters * 100) : 0;
             const totalDistricts = new Set(data.map(row => row.District)).size;
 
             document.getElementById('kpiSection').innerHTML = `
@@ -495,16 +497,18 @@
                 const rows = data.filter(r => r.Province === province);
                 const totalVoters = rows.reduce((sum, r) => sum + r.RegisteredVoters, 0);
                 const totalTurnout = rows.reduce((sum, r) => sum + r.TurnoutN, 0);
-                const avgTurnoutPct = rows.length > 0 ? 
-                    (rows.reduce((sum, r) => sum + r.TurnoutPct, 0) / rows.length) : 0;
+                // Calculate turnout percentage for the province
+                const provinceAverageTurnoutPct = totalVoters > 0 ? (totalTurnout / totalVoters * 100) : 0;
                 
                 return {
                     province,
-                    totalVoters: totalVoters / 1000000,
-                    totalTurnout: totalTurnout / 1000000,
-                    turnoutPct: avgTurnoutPct
+                    totalVoters: totalVoters / 1000000, // Convert to millions
+                    totalTurnout: totalTurnout / 1000000, // Convert to millions  
+                    turnoutPct: provinceAverageTurnoutPct
                 };
             });
+
+            console.log("Province data for chart:", provinceData); // Debug log
 
             // Destroy existing chart
             if (charts.provinceChart) {
@@ -536,11 +540,13 @@
                         {
                             label: 'Turnout Rate (%)',
                             data: provinceData.map(d => d.turnoutPct),
-                            backgroundColor: 'rgba(255, 193, 7, 0.8)',
+                            backgroundColor: 'rgba(255, 193, 7, 1)',
                             borderColor: 'rgba(255, 193, 7, 1)',
-                            borderWidth: 1,
+                            borderWidth: 3,
                             type: 'line',
-                            yAxisID: 'y1'
+                            yAxisID: 'y1',
+                            fill: false,
+                            tension: 0.1
                         }
                     ]
                 },
@@ -625,8 +631,8 @@
             const rows = data.filter(r => r.District === district);
             const totalVoters = rows.reduce((sum, r) => sum + r.RegisteredVoters, 0);
             const totalTurnout = rows.reduce((sum, r) => sum + r.TurnoutN, 0);
-            const avgTurnoutPct = rows.length > 0 ? 
-                (rows.reduce((sum, r) => sum + r.TurnoutPct, 0) / rows.length) : 0;
+            // Calculate actual turnout percentage for the district
+            const avgTurnoutPct = totalVoters > 0 ? (totalTurnout / totalVoters * 100) : 0;
             const constituencies = rows.length;
 
             // Update stats
@@ -690,8 +696,9 @@
                 const rows = data.filter(r => r.District === district);
                 const totalVoters = rows.reduce((sum, r) => sum + r.RegisteredVoters, 0) / 1000000;
                 const totalTurnout = rows.reduce((sum, r) => sum + r.TurnoutN, 0) / 1000000;
-                const avgTurnoutPct = rows.length > 0 ? 
-                    (rows.reduce((sum, r) => sum + r.TurnoutPct, 0) / rows.length) : 0;
+                // Calculate actual turnout percentage for comparison
+                const avgTurnoutPct = rows.reduce((sum, r) => sum + r.RegisteredVoters, 0) > 0 ? 
+                    (rows.reduce((sum, r) => sum + r.TurnoutN, 0) / rows.reduce((sum, r) => sum + r.RegisteredVoters, 0) * 100) : 0;
                 return [totalVoters, totalTurnout, avgTurnoutPct];
             };
 
@@ -751,8 +758,10 @@
         function renderTrendsChart() {
             // Enhanced engagement analysis with concrete metrics
             const totalDistricts = data.length;
-            const avgTurnout = data.length > 0 ? 
-                (data.reduce((sum, row) => sum + row.TurnoutPct, 0) / data.length) : 0;
+            const totalVoters = data.reduce((sum, row) => sum + row.RegisteredVoters, 0);
+            const totalTurnout = data.reduce((sum, row) => sum + row.TurnoutN, 0);
+            // Calculate overall average turnout
+            const avgTurnout = totalVoters > 0 ? (totalTurnout / totalVoters * 100) : 0;
             
             // Group districts by turnout rate ranges for engagement analysis
             const ranges = [
