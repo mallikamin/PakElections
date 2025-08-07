@@ -331,9 +331,14 @@
 
         function parseNumberSafe(str) {
             if (!str) return 0;
-            const cleaned = str.toString().replace(/[^\d.-]/g, '');
+            // Handle both string and number inputs
+            let cleaned = str.toString().trim();
+            // Remove any commas, spaces, and non-numeric characters except decimal points and negative signs
+            cleaned = cleaned.replace(/[,\s]/g, '').replace(/[^\d.-]/g, '');
             const num = parseFloat(cleaned);
-            return isNaN(num) ? 0 : num;
+            const result = isNaN(num) ? 0 : Math.round(num); // Round to avoid floating point precision issues
+            console.log(`parseNumberSafe: "${str}" -> "${cleaned}" -> ${result}`);
+            return result;
         }
 
         // Generate sample data for demo with realistic Pakistani election numbers
@@ -385,11 +390,14 @@
                 header: true,
                 download: true,
                 skipEmptyLines: true,
-                dynamicTyping: false,
+                dynamicTyping: false, // Keep as false to handle conversion manually
+                delimiter: ',',
                 complete: function(results) {
                     console.log("CSV parse complete:", results);
                     if (results.data && results.data.length > 0 && Object.keys(results.data[0]).length > 1) {
                         console.log("Valid CSV data found, processing...");
+                        console.log("CSV headers:", Object.keys(results.data[0]));
+                        console.log("First 3 raw rows:", results.data.slice(0, 3));
                         processData(results.data);
                     } else {
                         console.log("No valid CSV data found, using sample data");
@@ -408,11 +416,10 @@
             console.log("Raw data loaded:", rawData.length, "rows");
             console.log("Sample raw data:", rawData.slice(0, 3));
             
-            // CRITICAL FIX: Direct summation approach for total voter turnout
-            // The 'Voters' column represents the actual voter turnout per row
-            // We sum ALL rows for the selected year to get total turnout
+            // CRITICAL FIX: Proper number parsing for CSV data
+            // The issue was that CSV values were being treated as strings
             
-            // Clean and normalize the data
+            // Clean and normalize the data with proper number conversion
             allData = rawData
                 .filter(row => {
                     const hasRegistered = row.RegisteredVoters || row["Registered Voters"] || row.registered_voters;
@@ -420,8 +427,15 @@
                     return hasRegistered && hasVoters;
                 })
                 .map(row => {
-                    const registeredVoters = parseNumberSafe(row.RegisteredVoters || row["Registered Voters"] || row.registered_voters);
-                    const actualVoterTurnout = parseNumberSafe(row.Voters || row.voters || row.TurnoutN || row["Turnout N"] || row.turnout_n);
+                    // Try different column name variations and parse numbers properly
+                    const registeredVoters = parseNumberSafe(
+                        row.RegisteredVoters || row["Registered Voters"] || row.registered_voters || 
+                        row["Registered voters"] || row["REGISTERED VOTERS"] || 0
+                    );
+                    const actualVoterTurnout = parseNumberSafe(
+                        row.Voters || row.voters || row.TurnoutN || row["Turnout N"] || 
+                        row.turnout_n || row["VOTERS"] || row.Turnout || row.turnout || 0
+                    );
                     
                     const normalized = {
                         Province: (row.Province || row.province || '').trim(),
@@ -435,6 +449,14 @@
                         Candidate: (row.Candidate || row.candidate || '').trim()
                     };
                     
+                    // Debug logging for the first few rows
+                    if (rawData.indexOf(row) < 5) {
+                        console.log(`Row ${rawData.indexOf(row)} conversion:`);
+                        console.log(`  Raw RegisteredVoters: "${row.RegisteredVoters || row["Registered Voters"]}" -> ${registeredVoters}`);
+                        console.log(`  Raw Voters: "${row.Voters || row.voters}" -> ${actualVoterTurnout}`);
+                        console.log(`  Normalized:`, normalized);
+                    }
+                    
                     return normalized;
                 })
                 .filter(row => row.RegisteredVoters > 0 && row.Province && row.District && row.Voters >= 0);
@@ -442,10 +464,13 @@
             console.log("Cleaned data:", allData.length, "rows");
             console.log("Sample cleaned rows:", allData.slice(0, 5));
             
-            // Verify total calculation approach
+            // Verify total calculation approach with detailed logging
             const testYear = '2024';
             const testData = allData.filter(row => row.Year === testYear);
-            const totalVotersSum = testData.reduce((sum, row) => sum + row.Voters, 0);
+            const totalVotersSum = testData.reduce((sum, row) => {
+                console.log(`Adding ${row.Voters} voters from ${row.District}`);
+                return sum + row.Voters;
+            }, 0);
             const totalRegisteredSum = testData.reduce((sum, row) => sum + row.RegisteredVoters, 0);
             const overallTurnoutTest = totalRegisteredSum > 0 ? (totalVotersSum / totalRegisteredSum * 100) : 0;
             
@@ -454,6 +479,7 @@
             console.log(`Total Voters (sum of 'Voters' column):`, totalVotersSum.toLocaleString());
             console.log(`Total Registered (sum of 'RegisteredVoters' column):`, totalRegisteredSum.toLocaleString());
             console.log(`Overall Turnout Rate:`, overallTurnoutTest.toFixed(2), '%');
+            console.log(`Sample voter values:`, testData.slice(0, 10).map(r => `${r.District}: ${r.Voters}`));
             
             if (allData.length === 0) {
                 document.getElementById('kpiSection').innerHTML = 
