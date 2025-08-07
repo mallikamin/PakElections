@@ -1,0 +1,153 @@
+﻿Test Dashboard for Pakistan General Elections 1970 onwards
+ <br>  Data source Gallup Analytics </br>
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Pakistan Elections Dashboard</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    #nav { margin-bottom: 20px; }
+    #nav button { margin-right: 10px; padding: 10px; }
+    .page { display: none; }
+    .active { display: block; }
+    select { margin: 10px 5px; padding: 5px; }
+  </style>
+</head>
+<body>
+
+<h2>Pakistan Elections Dashboard</h2>
+<div id="nav">
+  <button onclick="showPage('page1')">District Detail View</button>
+  <button onclick="showPage('page2')">District Comparison</button>
+</div>
+
+<div id="page1" class="page active">
+  <h3>District-wise KPIs Over Years</h3>
+  <label for="districtSelect">District:</label>
+  <select id="districtSelect"></select>
+  <div id="districtChart"></div>
+</div>
+
+<div id="page2" class="page">
+  <h3>Compare Two Districts</h3>
+  <label for="district1">District 1:</label>
+  <select id="district1"></select>
+  <label for="district2">District 2:</label>
+  <select id="district2"></select>
+  <div id="comparisonChart"></div>
+</div>
+
+<script>
+let data = [];
+
+// Load CSV
+Papa.parse("data.csv", {
+  download: true,
+  header: true,
+  complete: function(results) {
+    data = results.data.filter(d => d.Year && d.District && d["Registered Voters"] && d.Votes);
+    data.forEach(d => {
+      d.Year = +d.Year;
+      d.Votes = +d.Votes;
+      d["Registered Voters"] = +d["Registered Voters"];
+      d.Turnout = ((d.Votes / d["Registered Voters"]) * 100).toFixed(2);
+    });
+    populateSelectors();
+    drawDistrictChart();
+    drawComparisonChart();
+  }
+});
+
+function showPage(pageId) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(pageId).classList.add('active');
+}
+
+function populateSelectors() {
+  const districts = [...new Set(data.map(d => d.District))].sort();
+  const districtSelect = document.getElementById("districtSelect");
+  const d1 = document.getElementById("district1");
+  const d2 = document.getElementById("district2");
+
+  for (let dist of districts) {
+    [districtSelect, d1, d2].forEach(sel => {
+      const option = document.createElement("option");
+      option.value = dist;
+      option.text = dist;
+      sel.appendChild(option.cloneNode(true));
+    });
+  }
+
+  districtSelect.addEventListener("change", drawDistrictChart);
+  d1.addEventListener("change", drawComparisonChart);
+  d2.addEventListener("change", drawComparisonChart);
+}
+
+function drawDistrictChart() {
+  const selected = document.getElementById("districtSelect").value;
+  const filtered = data.filter(d => d.District === selected);
+  
+  const years = filtered.map(d => d.Year);
+  const registered = filtered.map(d => d["Registered Voters"]);
+  const votes = filtered.map(d => d.Votes);
+  const turnout = filtered.map(d => +d.Turnout);
+
+  const fig = [
+    { x: years, y: registered, name: 'Registered Voters', type: 'bar' },
+    { x: years, y: votes, name: 'Votes Cast', type: 'bar' },
+    { x: years, y: turnout, name: 'Turnout %', yaxis: 'y2', type: 'scatter', mode: 'lines+markers' }
+  ];
+
+  const layout = {
+    title: `KPIs for ${selected}`,
+    barmode: 'group',
+    yaxis: { title: 'Count' },
+    yaxis2: { title: 'Turnout %', overlaying: 'y', side: 'right' },
+    xaxis: { title: 'Year' }
+  };
+
+  Plotly.newPlot("districtChart", fig, layout);
+}
+
+function drawComparisonChart() {
+  const d1 = document.getElementById("district1").value;
+  const d2 = document.getElementById("district2").value;
+
+  if (!d1 || !d2 || d1 === d2) return;
+
+  const f1 = data.filter(d => d.District === d1);
+  const f2 = data.filter(d => d.District === d2);
+
+  const trace1 = {
+    x: f1.map(d => d.Year),
+    y: f1.map(d => +d.Turnout),
+    name: d1,
+    mode: 'lines+markers',
+    type: 'scatter'
+  };
+
+  const trace2 = {
+    x: f2.map(d => d.Year),
+    y: f2.map(d => +d.Turnout),
+    name: d2,
+    mode: 'lines+markers',
+    type: 'scatter'
+  };
+
+  const layout = {
+    title: `Turnout % Comparison: ${d1} vs ${d2}`,
+    xaxis: { title: 'Year' },
+    yaxis: { title: 'Turnout %' }
+  };
+
+  Plotly.newPlot("comparisonChart", [trace1, trace2], layout);
+}
+</script>
+
+</body>
+</html>
