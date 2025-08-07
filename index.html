@@ -4,150 +4,174 @@
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-  <meta charset="UTF-8" />
-  <title>Pakistan Elections Dashboard</title>
-  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
-  <style>
-    body { font-family: Arial, sans-serif; padding: 20px; }
-    #nav { margin-bottom: 20px; }
-    #nav button { margin-right: 10px; padding: 10px; }
-    .page { display: none; }
-    .active { display: block; }
-    select { margin: 10px 5px; padding: 5px; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pakistan Elections Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f9fafb;
+        }
+        .card {
+            @apply bg-white rounded-2xl shadow p-6 mb-6;
+        }
+    </style>
 </head>
-<body>
 
-<h2>Pakistan Elections Dashboard</h2>
-<div id="nav">
-  <button onclick="showPage('page1')">District Detail View</button>
-  <button onclick="showPage('page2')">District Comparison</button>
-</div>
+<body class="p-6">
+    <div class="max-w-7xl mx-auto">
+        <h1 class="text-3xl font-bold mb-8 text-center">Pakistan Elections 2024 Dashboard</h1>
 
-<div id="page1" class="page active">
-  <h3>District-wise KPIs Over Years</h3>
-  <label for="districtSelect">District:</label>
-  <select id="districtSelect"></select>
-  <div id="districtChart"></div>
-</div>
+        <div id="tabs" class="flex space-x-4 mb-8">
+            <button onclick="switchTab('province-overview')" class="tab-button font-semibold">🗺️ Province Overview</button>
+            <button onclick="switchTab('district-comparison')" class="tab-button font-semibold">🏙️ District Comparison</button>
+        </div>
 
-<div id="page2" class="page">
-  <h3>Compare Two Districts</h3>
-  <label for="district1">District 1:</label>
-  <select id="district1"></select>
-  <label for="district2">District 2:</label>
-  <select id="district2"></select>
-  <div id="comparisonChart"></div>
-</div>
+        <!-- Province Overview Page -->
+        <div id="province-overview" class="tab-content">
+            <div id="provinceContainer" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+        </div>
 
-<script>
-let data = [];
+        <!-- District Comparison Page -->
+        <div id="district-comparison" class="tab-content hidden">
+            <div class="card">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <select id="district1" class="p-2 border rounded">
+                        <option value="">Select District 1</option>
+                    </select>
+                    <select id="district2" class="p-2 border rounded">
+                        <option value="">Select District 2</option>
+                    </select>
+                </div>
+                <canvas id="compareChart"></canvas>
+            </div>
+        </div>
+    </div>
 
-// Load CSV
-Papa.parse("data.csv", {
-  download: true,
-  header: true,
-  complete: function(results) {
-    data = results.data.filter(d => d.Year && d.District && d["Registered Voters"] && d.Votes);
-    data.forEach(d => {
-      d.Year = +d.Year;
-      d.Votes = +d.Votes;
-      d["Registered Voters"] = +d["Registered Voters"];
-      d.Turnout = ((d.Votes / d["Registered Voters"]) * 100).toFixed(2);
-    });
-    populateSelectors();
-    drawDistrictChart();
-    drawComparisonChart();
-  }
-});
+    <script>
+        let data = [];
+        let provinces = [];
+        let districts = [];
 
-function showPage(pageId) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.getElementById(pageId).classList.add('active');
-}
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+            document.getElementById(tab).classList.remove('hidden');
+        }
 
-function populateSelectors() {
-  const districts = [...new Set(data.map(d => d.District))].sort();
-  const districtSelect = document.getElementById("districtSelect");
-  const d1 = document.getElementById("district1");
-  const d2 = document.getElementById("district2");
+        Papa.parse("data2024.csv", {
+            download: true,
+            header: true,
+            complete: function (results) {
+                data = results.data.filter(d => d.Year == "2024");
+                provinces = [...new Set(data.map(d => d.Province))];
+                districts = [...new Set(data.map(d => d.District))];
+                populateProvinceOverview();
+                populateDistrictDropdowns();
+            }
+        });
 
-  for (let dist of districts) {
-    [districtSelect, d1, d2].forEach(sel => {
-      const option = document.createElement("option");
-      option.value = dist;
-      option.text = dist;
-      sel.appendChild(option.cloneNode(true));
-    });
-  }
+        function populateProvinceOverview() {
+            const container = document.getElementById("provinceContainer");
+            provinces.forEach(province => {
+                const provinceData = data.filter(d => d.Province === province);
+                const totalVoters = provinceData.reduce((sum, d) => sum + +d["Registered Voters"], 0);
+                const totalVotes = provinceData.reduce((sum, d) => sum + +d.Votes, 0);
+                const turnout = ((totalVotes / totalVoters) * 100).toFixed(2);
 
-  districtSelect.addEventListener("change", drawDistrictChart);
-  d1.addEventListener("change", drawComparisonChart);
-  d2.addEventListener("change", drawComparisonChart);
-}
+                const topDistricts = [...provinceData].sort((a, b) => b.Votes - a.Votes).slice(0, 3);
 
-function drawDistrictChart() {
-  const selected = document.getElementById("districtSelect").value;
-  const filtered = data.filter(d => d.District === selected);
-  
-  const years = filtered.map(d => d.Year);
-  const registered = filtered.map(d => d["Registered Voters"]);
-  const votes = filtered.map(d => d.Votes);
-  const turnout = filtered.map(d => +d.Turnout);
+                const card = document.createElement("div");
+                card.className = "card";
+                card.innerHTML = `
+                    <h2 class="text-xl font-semibold mb-2">${province}</h2>
+                    <p><strong>Registered Voters:</strong> ${totalVoters.toLocaleString()}</p>
+                    <p><strong>Votes Cast:</strong> ${totalVotes.toLocaleString()}</p>
+                    <p><strong>Turnout:</strong> ${turnout}%</p>
+                    <div class="mt-4">
+                        <h3 class="font-semibold">Top 3 Districts</h3>
+                        <ul class="list-disc list-inside">
+                            ${topDistricts.map(d => `<li>${d.District}: ${(+d["Registered Voters"]).toLocaleString()} RV, ${(+(d.Votes)).toLocaleString()} Votes, ${((+d.Votes / +d["Registered Voters"]) * 100).toFixed(1)}%</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
 
-  const fig = [
-    { x: years, y: registered, name: 'Registered Voters', type: 'bar' },
-    { x: years, y: votes, name: 'Votes Cast', type: 'bar' },
-    { x: years, y: turnout, name: 'Turnout %', yaxis: 'y2', type: 'scatter', mode: 'lines+markers' }
-  ];
+        function populateDistrictDropdowns() {
+            const d1 = document.getElementById("district1");
+            const d2 = document.getElementById("district2");
+            districts.forEach(dist => {
+                d1.innerHTML += `<option value="${dist}">${dist}</option>`;
+                d2.innerHTML += `<option value="${dist}">${dist}</option>`;
+            });
 
-  const layout = {
-    title: `KPIs for ${selected}`,
-    barmode: 'group',
-    yaxis: { title: 'Count' },
-    yaxis2: { title: 'Turnout %', overlaying: 'y', side: 'right' },
-    xaxis: { title: 'Year' }
-  };
+            d1.addEventListener("change", renderComparisonChart);
+            d2.addEventListener("change", renderComparisonChart);
+        }
 
-  Plotly.newPlot("districtChart", fig, layout);
-}
+        function renderComparisonChart() {
+            const d1 = document.getElementById("district1").value;
+            const d2 = document.getElementById("district2").value;
 
-function drawComparisonChart() {
-  const d1 = document.getElementById("district1").value;
-  const d2 = document.getElementById("district2").value;
+            if (!d1 || !d2) return;
 
-  if (!d1 || !d2 || d1 === d2) return;
+            const districtData1 = data.filter(d => d.District === d1);
+            const districtData2 = data.filter(d => d.District === d2);
+            const labels = [...new Set([...districtData1, ...districtData2].map(d => d.Year))].sort();
 
-  const f1 = data.filter(d => d.District === d1);
-  const f2 = data.filter(d => d.District === d2);
+            const d1Turnout = labels.map(year => {
+                const entry = districtData1.find(d => d.Year === year);
+                return entry ? ((+entry.Votes / +entry["Registered Voters"]) * 100).toFixed(2) : null;
+            });
 
-  const trace1 = {
-    x: f1.map(d => d.Year),
-    y: f1.map(d => +d.Turnout),
-    name: d1,
-    mode: 'lines+markers',
-    type: 'scatter'
-  };
+            const d2Turnout = labels.map(year => {
+                const entry = districtData2.find(d => d.Year === year);
+                return entry ? ((+entry.Votes / +entry["Registered Voters"]) * 100).toFixed(2) : null;
+            });
 
-  const trace2 = {
-    x: f2.map(d => d.Year),
-    y: f2.map(d => +d.Turnout),
-    name: d2,
-    mode: 'lines+markers',
-    type: 'scatter'
-  };
+            const ctx = document.getElementById("compareChart").getContext("2d");
+            if (window.compareChart) window.compareChart.destroy();
 
-  const layout = {
-    title: `Turnout % Comparison: ${d1} vs ${d2}`,
-    xaxis: { title: 'Year' },
-    yaxis: { title: 'Turnout %' }
-  };
-
-  Plotly.newPlot("comparisonChart", [trace1, trace2], layout);
-}
-</script>
-
+            window.compareChart = new Chart(ctx, {
+                type: "line",
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: d1,
+                            data: d1Turnout,
+                            borderWidth: 2,
+                            tension: 0.4
+                        },
+                        {
+                            label: d2,
+                            data: d2Turnout,
+                            borderWidth: 2,
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: "District Turnout % Over Years"
+                        },
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+    </script>
 </body>
+
 </html>
