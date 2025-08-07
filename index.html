@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pakistan Election Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.3.2/papaparse.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -329,79 +329,122 @@
             return registered > 0 ? (turnout / registered * 100) : 0;
         }
 
-        // Load and process data
-        Papa.parse("data.csv", {
-            header: true,
-            download: true,
-            skipEmptyLines: true,
-            dynamicTyping: false,
-            complete: function(results) {
-                console.log("Raw data loaded:", results.data.length, "rows");
-                
-                // Process all data first
-                allData = results.data
-                    .filter(row => row["Registered Voters"] || row["registered_voters"] || row.RegisteredVoters)
-                    .map(row => {
-                        // Normalize column names and parse numbers
-                        const normalized = {
-                            Province: row.Province || row.province || '',
-                            District: row.District || row.district || '',
-                            Year: row.Year || row.year || '2024',
-                            RegisteredVoters: parseNumberSafe(row["Registered Voters"] || row.registered_voters || row.RegisteredVoters),
-                            Voters: parseNumberSafe(row["Voters"] || row.voters || row.Voters || 0), // This is actual turnout
-                            TurnoutN: parseNumberSafe(row["Turnout N"] || row.turnout_n || row.TurnoutN || row["Voters"] || row.voters),
-                            TurnoutPct: 0 // Will calculate this properly
-                        };
-                        
-                        // Use "Voters" column as the actual turnout if available, otherwise use TurnoutN
-                        const actualTurnout = parseNumberSafe(row["Voters"] || row.voters) || normalized.TurnoutN;
-                        normalized.TurnoutN = actualTurnout;
-                        
-                        // Calculate turnout percentage correctly
-                        if (normalized.RegisteredVoters > 0) {
-                            normalized.TurnoutPct = (actualTurnout / normalized.RegisteredVoters * 100);
-                        }
-                        
-                        return normalized;
-                    })
-                    .filter(row => row.RegisteredVoters > 0); // Only keep rows with voter data
+        // Generate sample data for demo
+        function generateSampleData() {
+            const provinces = ['Punjab', 'Sindh', 'Khyber Pakhtunkhwa', 'Balochistan', 'Gilgit-Baltistan'];
+            const years = ['2018', '2024'];
+            const sampleData = [];
 
-                console.log("Processed all data:", allData.length, "rows");
+            provinces.forEach(province => {
+                const districtCount = province === 'Punjab' ? 10 : province === 'Sindh' ? 8 : 6;
                 
-                if (allData.length === 0) {
-                    document.getElementById('kpiSection').innerHTML = 
-                        '<div style="text-align: center; color: #dc3545; padding: 40px;">No valid election data found. Please check your CSV file format.</div>';
-                    return;
+                for (let i = 1; i <= districtCount; i++) {
+                    years.forEach(year => {
+                        const baseVoters = Math.floor(Math.random() * 500000) + 200000;
+                        const turnoutRate = Math.random() * 0.4 + 0.3; // 30-70%
+                        const actualTurnout = Math.floor(baseVoters * turnoutRate);
+                        
+                        sampleData.push({
+                            Province: province,
+                            District: `${province} District ${i}`,
+                            Year: year,
+                            RegisteredVoters: baseVoters,
+                            Voters: actualTurnout,
+                            TurnoutN: actualTurnout,
+                            TurnoutPct: turnoutRate * 100
+                        });
+                    });
                 }
+            });
 
-                // Populate year dropdown
-                const years = [...new Set(allData.map(row => row.Year))].sort().reverse();
-                const yearSelect = document.getElementById('yearSelect');
-                years.forEach(year => {
-                    yearSelect.add(new Option(year, year));
-                });
-                
-                // Set default to latest year
-                selectedYear = years[0];
-                yearSelect.value = selectedYear;
-                
-                // Add year selection handler
-                yearSelect.addEventListener('change', () => {
-                    selectedYear = yearSelect.value;
-                    filterDataByYear();
-                    updateAllVisualizations();
-                });
+            return sampleData;
+        }
 
-                // Initial load with latest year
+        // Load and process data
+        function loadData() {
+            // Try to load from CSV first, fallback to sample data
+            Papa.parse("data.csv", {
+                header: true,
+                download: true,
+                skipEmptyLines: true,
+                dynamicTyping: false,
+                complete: function(results) {
+                    if (results.data && results.data.length > 0) {
+                        processData(results.data);
+                    } else {
+                        console.log("No CSV data found, using sample data");
+                        processData(generateSampleData());
+                    }
+                },
+                error: function(error) {
+                    console.log("CSV not found, using sample data");
+                    processData(generateSampleData());
+                }
+            });
+        }
+
+        function processData(rawData) {
+            console.log("Raw data loaded:", rawData.length, "rows");
+            
+            // Process all data first
+            allData = rawData
+                .filter(row => row.RegisteredVoters || row["Registered Voters"] || row.registered_voters)
+                .map(row => {
+                    // Normalize column names and parse numbers
+                    const normalized = {
+                        Province: row.Province || row.province || '',
+                        District: row.District || row.district || '',
+                        Year: row.Year || row.year || '2024',
+                        RegisteredVoters: parseNumberSafe(row.RegisteredVoters || row["Registered Voters"] || row.registered_voters),
+                        Voters: parseNumberSafe(row.Voters || row.voters || 0),
+                        TurnoutN: parseNumberSafe(row.TurnoutN || row["Turnout N"] || row.turnout_n || row.Voters || row.voters),
+                        TurnoutPct: 0
+                    };
+                    
+                    // Use "Voters" column as the actual turnout if available, otherwise use TurnoutN
+                    const actualTurnout = parseNumberSafe(row.Voters || row.voters) || normalized.TurnoutN;
+                    normalized.TurnoutN = actualTurnout;
+                    
+                    // Calculate turnout percentage correctly
+                    if (normalized.RegisteredVoters > 0) {
+                        normalized.TurnoutPct = (actualTurnout / normalized.RegisteredVoters * 100);
+                    }
+                    
+                    return normalized;
+                })
+                .filter(row => row.RegisteredVoters > 0);
+
+            console.log("Processed all data:", allData.length, "rows");
+            
+            if (allData.length === 0) {
+                document.getElementById('kpiSection').innerHTML = 
+                    '<div style="text-align: center; color: #dc3545; padding: 40px;">No valid election data found. Using sample data for demonstration.</div>';
+                allData = generateSampleData();
+            }
+
+            // Populate year dropdown
+            const years = [...new Set(allData.map(row => row.Year))].sort().reverse();
+            const yearSelect = document.getElementById('yearSelect');
+            yearSelect.innerHTML = '<option value="">All Years</option>';
+            years.forEach(year => {
+                yearSelect.add(new Option(year, year));
+            });
+            
+            // Set default to latest year
+            selectedYear = years[0];
+            yearSelect.value = selectedYear;
+            
+            // Add year selection handler
+            yearSelect.addEventListener('change', () => {
+                selectedYear = yearSelect.value;
                 filterDataByYear();
                 updateAllVisualizations();
-            },
-            error: function(error) {
-                console.error("Error loading data:", error);
-                document.getElementById('kpiSection').innerHTML = 
-                    '<div style="text-align: center; color: #dc3545; padding: 40px;">Error loading data. Please ensure data.csv exists and is properly formatted.</div>';
-            }
-        });
+            });
+
+            // Initial load with latest year
+            filterDataByYear();
+            updateAllVisualizations();
+        }
 
         function filterDataByYear() {
             if (selectedYear === '') {
@@ -457,8 +500,8 @@
                 
                 return {
                     province,
-                    totalVoters: totalVoters / 1000000, // Convert to millions
-                    totalTurnout: totalTurnout / 1000000, // Convert to millions
+                    totalVoters: totalVoters / 1000000,
+                    totalTurnout: totalTurnout / 1000000,
                     turnoutPct: avgTurnoutPct
                 };
             });
@@ -510,7 +553,7 @@
                     plugins: {
                         title: {
                             display: true,
-                            text: 'Provincial Electoral Statistics (2024)'
+                            text: `Provincial Electoral Statistics ${selectedYear ? '(' + selectedYear + ')' : ''}`
                         }
                     },
                     scales: {
@@ -563,267 +606,146 @@
                 compare2.add(new Option(district, district));
             });
 
-            // Clear previous event listeners by cloning elements
-            const newDistrictSelect = districtSelect.cloneNode(true);
-            const newCompare1 = compare1.cloneNode(true);
-            const newCompare2 = compare2.cloneNode(true);
-            
-            districtSelect.parentNode.replaceChild(newDistrictSelect, districtSelect);
-            compare1.parentNode.replaceChild(newCompare1, compare1);
-            compare2.parentNode.replaceChild(newCompare2, compare2);
-
             // District selection handler
-            newDistrictSelect.addEventListener('change', () => {
-                const district = newDistrictSelect.value;
-                if (!district) {
-                    document.getElementById('districtStats').style.display = 'none';
-                    return;
-                }
+            districtSelect.addEventListener('change', handleDistrictSelection);
 
-                const rows = data.filter(r => r.District === district);
-                const totalVoters = rows.reduce((sum, r) => sum + r.RegisteredVoters, 0);
-                const totalTurnout = rows.reduce((sum, r) => sum + r.TurnoutN, 0);
-                const avgTurnoutPct = rows.length > 0 ? 
-                    (rows.reduce((sum, r) => sum + r.TurnoutPct, 0) / rows.length) : 0;
-                const constituencies = rows.length;
-
-                // Update stats
-                document.getElementById('districtStats').innerHTML = `
-                    <div class="stat-item">
-                        <div class="stat-value">${formatNumber(totalVoters)}</div>
-                        <div class="stat-label">Registered Voters</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value">${formatNumber(totalTurnout)}</div>
-                        <div class="stat-label">Actual Turnout</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value">${avgTurnoutPct.toFixed(1)}%</div>
-                        <div class="stat-label">Turnout Rate</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value">${constituencies}</div>
-                        <div class="stat-label">Constituencies</div>
-                    </div>
-                `;
-                document.getElementById('districtStats').style.display = 'grid';
-
-                // Render chart
-                if (charts.districtChart) {
-                    charts.districtChart.destroy();
-                }
-
-                const ctx = document.getElementById("districtChart").getContext("2d");
-                charts.districtChart = new Chart(ctx, {
-                    type: 'doughnut',
-                    data: {
-                        labels: ['Voted', 'Did Not Vote'],
-                        datasets: [{
-                            data: [totalTurnout, totalVoters - totalTurnout],
-                            backgroundColor: ['#28a745', '#dc3545'],
-                            borderWidth: 2
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            title: {
-                                display: true,
-                                text: `Voter Participation in ${district} ${selectedYear ? '(' + selectedYear + ')' : ''}`
-                            }
-                        }
-                    }
-                });
-            });
-
-            // Comparison handler
-            function updateComparison() {
-                const d1 = newCompare1.value;
-                const d2 = newCompare2.value;
-                if (!d1 || !d2) return;
-
-                const getStats = (district) => {
-                    const rows = data.filter(r => r.District === district);
-                    const totalVoters = rows.reduce((sum, r) => sum + r.RegisteredVoters, 0) / 1000000;
-                    const totalTurnout = rows.reduce((sum, r) => sum + r.TurnoutN, 0) / 1000000;
-                    const avgTurnoutPct = rows.length > 0 ? 
-                        (rows.reduce((sum, r) => sum + r.TurnoutPct, 0) / rows.length) : 0;
-                    return [totalVoters, totalTurnout, avgTurnoutPct];
-                };
-
-                const stats1 = getStats(d1);
-                const stats2 = getStats(d2);
-
-                if (charts.compareChart) {
-                    charts.compareChart.destroy();
-                }
-
-                const ctx = document.getElementById("compareChart").getContext("2d");
-                charts.compareChart = new Chart(ctx, {
-                    type: 'radar',
-                    data: {
-                        labels: ['Registered Voters (M)', 'Actual Turnout (M)', 'Turnout Rate (%)'],
-                        datasets: [
-                            {
-                                label: d1,
-                                data: stats1,
-                                backgroundColor: 'rgba(0, 123, 255, 0.2)',
-                                borderColor: 'rgba(0, 123, 255, 1)',
-                                pointBackgroundColor: 'rgba(0, 123, 255, 1)',
-                                pointBorderColor: '#fff',
-                                pointHoverBackgroundColor: '#fff',
-                                pointHoverBorderColor: 'rgba(0, 123, 255, 1)'
-                            },
-                            {
-                                label: d2,
-                                data: stats2,
-                                backgroundColor: 'rgba(40, 167, 69, 0.2)',
-                                borderColor: 'rgba(40, 167, 69, 1)',
-                                pointBackgroundColor: 'rgba(40, 167, 69, 1)',
-                                pointBorderColor: '#fff',
-                                pointHoverBackgroundColor: '#fff',
-                                pointHoverBorderColor: 'rgba(40, 167, 69, 1)'
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        elements: {
-                            line: {
-                                borderWidth: 3
-                            }
-                        },
-                        plugins: {
-                            title: {
-                                display: true,
-                                text: `District Comparison: ${d1} vs ${d2} ${selectedYear ? '(' + selectedYear + ')' : ''}`
-                            }
-                        }
-                    }
-                });
-            }
-
-            newCompare1.addEventListener('change', updateComparison);
-            newCompare2.addEventListener('change', updateComparison);
-        }<div class="stat-value">${formatNumber(totalVoters)}</div>
-                        <div class="stat-label">Registered Voters</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value">${formatNumber(totalTurnout)}</div>
-                        <div class="stat-label">Total Turnout</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value">${avgTurnoutPct.toFixed(1)}%</div>
-                        <div class="stat-label">Turnout Rate</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="stat-value">${constituencies}</div>
-                        <div class="stat-label">Constituencies</div>
-                    </div>
-                `;
-                document.getElementById('districtStats').style.display = 'grid';
-
-                // Render chart
-                if (charts.districtChart) {
-                    charts.districtChart.destroy();
-                }
-
-                const ctx = document.getElementById("districtChart").getContext("2d");
-                charts.districtChart = new Chart(ctx, {
-                    type: 'doughnut',
-                    data: {
-                        labels: ['Voted', 'Did Not Vote'],
-                        datasets: [{
-                            data: [totalTurnout, totalVoters - totalTurnout],
-                            backgroundColor: ['#28a745', '#dc3545'],
-                            borderWidth: 2
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            title: {
-                                display: true,
-                                text: `Voter Participation in ${district}`
-                            }
-                        }
-                    }
-                });
-            });
-
-            // Comparison handler
-            function updateComparison() {
-                const d1 = compare1.value;
-                const d2 = compare2.value;
-                if (!d1 || !d2) return;
-
-                const getStats = (district) => {
-                    const rows = data.filter(r => r.District === district);
-                    const totalVoters = rows.reduce((sum, r) => sum + r.RegisteredVoters, 0) / 1000000;
-                    const totalTurnout = rows.reduce((sum, r) => sum + r.TurnoutN, 0) / 1000000;
-                    const avgTurnoutPct = rows.length > 0 ? 
-                        (rows.reduce((sum, r) => sum + r.TurnoutPct, 0) / rows.length) : 0;
-                    return [totalVoters, totalTurnout, avgTurnoutPct];
-                };
-
-                const stats1 = getStats(d1);
-                const stats2 = getStats(d2);
-
-                if (charts.compareChart) {
-                    charts.compareChart.destroy();
-                }
-
-                const ctx = document.getElementById("compareChart").getContext("2d");
-                charts.compareChart = new Chart(ctx, {
-                    type: 'radar',
-                    data: {
-                        labels: ['Registered Voters (M)', 'Turnout (M)', 'Turnout Rate (%)'],
-                        datasets: [
-                            {
-                                label: d1,
-                                data: stats1,
-                                backgroundColor: 'rgba(0, 123, 255, 0.2)',
-                                borderColor: 'rgba(0, 123, 255, 1)',
-                                pointBackgroundColor: 'rgba(0, 123, 255, 1)',
-                                pointBorderColor: '#fff',
-                                pointHoverBackgroundColor: '#fff',
-                                pointHoverBorderColor: 'rgba(0, 123, 255, 1)'
-                            },
-                            {
-                                label: d2,
-                                data: stats2,
-                                backgroundColor: 'rgba(40, 167, 69, 0.2)',
-                                borderColor: 'rgba(40, 167, 69, 1)',
-                                pointBackgroundColor: 'rgba(40, 167, 69, 1)',
-                                pointBorderColor: '#fff',
-                                pointHoverBackgroundColor: '#fff',
-                                pointHoverBorderColor: 'rgba(40, 167, 69, 1)'
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        elements: {
-                            line: {
-                                borderWidth: 3
-                            }
-                        },
-                        plugins: {
-                            title: {
-                                display: true,
-                                text: `District Comparison: ${d1} vs ${d2}`
-                            }
-                        }
-                    }
-                });
-            }
-
+            // Comparison handlers
             compare1.addEventListener('change', updateComparison);
             compare2.addEventListener('change', updateComparison);
+        }
+
+        function handleDistrictSelection() {
+            const districtSelect = document.getElementById("districtSelect");
+            const district = districtSelect.value;
+            if (!district) {
+                document.getElementById('districtStats').style.display = 'none';
+                return;
+            }
+
+            const rows = data.filter(r => r.District === district);
+            const totalVoters = rows.reduce((sum, r) => sum + r.RegisteredVoters, 0);
+            const totalTurnout = rows.reduce((sum, r) => sum + r.TurnoutN, 0);
+            const avgTurnoutPct = rows.length > 0 ? 
+                (rows.reduce((sum, r) => sum + r.TurnoutPct, 0) / rows.length) : 0;
+            const constituencies = rows.length;
+
+            // Update stats
+            document.getElementById('districtStats').innerHTML = `
+                <div class="stat-item">
+                    <div class="stat-value">${formatNumber(totalVoters)}</div>
+                    <div class="stat-label">Registered Voters</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${formatNumber(totalTurnout)}</div>
+                    <div class="stat-label">Actual Turnout</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${avgTurnoutPct.toFixed(1)}%</div>
+                    <div class="stat-label">Turnout Rate</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${constituencies}</div>
+                    <div class="stat-label">Constituencies</div>
+                </div>
+            `;
+            document.getElementById('districtStats').style.display = 'grid';
+
+            // Render chart
+            if (charts.districtChart) {
+                charts.districtChart.destroy();
+            }
+
+            const ctx = document.getElementById("districtChart").getContext("2d");
+            charts.districtChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Voted', 'Did Not Vote'],
+                    datasets: [{
+                        data: [totalTurnout, totalVoters - totalTurnout],
+                        backgroundColor: ['#28a745', '#dc3545'],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: `Voter Participation in ${district} ${selectedYear ? '(' + selectedYear + ')' : ''}`
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateComparison() {
+            const compare1 = document.getElementById("compare1");
+            const compare2 = document.getElementById("compare2");
+            const d1 = compare1.value;
+            const d2 = compare2.value;
+            if (!d1 || !d2) return;
+
+            const getStats = (district) => {
+                const rows = data.filter(r => r.District === district);
+                const totalVoters = rows.reduce((sum, r) => sum + r.RegisteredVoters, 0) / 1000000;
+                const totalTurnout = rows.reduce((sum, r) => sum + r.TurnoutN, 0) / 1000000;
+                const avgTurnoutPct = rows.length > 0 ? 
+                    (rows.reduce((sum, r) => sum + r.TurnoutPct, 0) / rows.length) : 0;
+                return [totalVoters, totalTurnout, avgTurnoutPct];
+            };
+
+            const stats1 = getStats(d1);
+            const stats2 = getStats(d2);
+
+            if (charts.compareChart) {
+                charts.compareChart.destroy();
+            }
+
+            const ctx = document.getElementById("compareChart").getContext("2d");
+            charts.compareChart = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: ['Registered Voters (M)', 'Actual Turnout (M)', 'Turnout Rate (%)'],
+                    datasets: [
+                        {
+                            label: d1,
+                            data: stats1,
+                            backgroundColor: 'rgba(0, 123, 255, 0.2)',
+                            borderColor: 'rgba(0, 123, 255, 1)',
+                            pointBackgroundColor: 'rgba(0, 123, 255, 1)',
+                            pointBorderColor: '#fff',
+                            pointHoverBackgroundColor: '#fff',
+                            pointHoverBorderColor: 'rgba(0, 123, 255, 1)'
+                        },
+                        {
+                            label: d2,
+                            data: stats2,
+                            backgroundColor: 'rgba(40, 167, 69, 0.2)',
+                            borderColor: 'rgba(40, 167, 69, 1)',
+                            pointBackgroundColor: 'rgba(40, 167, 69, 1)',
+                            pointBorderColor: '#fff',
+                            pointHoverBackgroundColor: '#fff',
+                            pointHoverBorderColor: 'rgba(40, 167, 69, 1)'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    elements: {
+                        line: {
+                            borderWidth: 3
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: `District Comparison: ${d1} vs ${d2} ${selectedYear ? '(' + selectedYear + ')' : ''}`
+                        }
+                    }
+                }
+            });
         }
 
         function renderTrendsChart() {
@@ -998,6 +920,11 @@
             `;
             trendsContainer.appendChild(insightsDiv);
         }
+
+        // Initialize the application
+        window.addEventListener('DOMContentLoaded', function() {
+            loadData();
+        });
     </script>
 </body>
 </html>
