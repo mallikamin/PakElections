@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Election Results Analysis</title>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; max-width: 900px; }
+    label { font-weight: bold; }
+    select { margin: 5px 10px 15px 0; padding: 5px; min-width: 120px; }
+    .summary { margin-top: 20px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 15px; }
+    th, td { border: 1px solid #ddd; padding: 8px; }
+    th { background-color: #f5f5f5; text-align: left; }
+    .winner { font-weight: bold; font-size: 1.1em; margin: 15px 0; }
+    canvas { margin-top: 20px; }
+    .minimal { color: #444; }
+  </style>
+</head>
+<body>
+
+  <h1>Election Results Analysis</h1>
+
+  <div>
+    <label for="yearSelect">Year:</label>
+    <select id="yearSelect"></select>
+
+    <label for="districtSelect">District:</label>
+    <select id="districtSelect">
+      <option value="">-- All Districts --</option>
+    </select>
+
+    <label for="naSelect">NA:</label>
+    <select id="naSelect">
+      <option value="">-- All NAs --</option>
+    </select>
+  </div>
+
+  <div id="summary" class="summary"></div>
+
+  <table id="resultsTable" style="display:none;">
+    <thead>
+      <tr>
+        <th>Candidate Name</th>
+        <th>Party</th>
+        <th>Votes</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <canvas id="partyChart" width="800" height="400" style="display:none;"></canvas>
+
+  <script>
+    const csvUrl = 'https://raw.githubusercontent.com/mallikamin/PakElections/main/data.csv';
+
+    let data = [];
+    let years = [];
+    let districts = [];
+    let nas = [];
+
+    const yearSelect = document.getElementById('yearSelect');
+    const districtSelect = document.getElementById('districtSelect');
+    const naSelect = document.getElementById('naSelect');
+    const summaryDiv = document.getElementById('summary');
+    const resultsTable = document.getElementById('resultsTable');
+    const resultsTbody = resultsTable.querySelector('tbody');
+    const partyChartCtx = document.getElementById('partyChart').getContext('2d');
+
+    let partyChart;
+
+    function parseNumber(val) {
+      const num = Number(val);
+      return isNaN(num) ? 0 : num;
+    }
+
+    Papa.parse(csvUrl, {
+      download: true,
+      header: true,
+      dynamicTyping: false,
+      complete: results => {
+        data = results.data.filter(r => r.Year && r.Year.trim() !== '');
+        initializeUI();
+      },
+      error: err => alert('Error loading CSV: ' + err)
+    });
+
+    function initializeUI() {
+      years = [...new Set(data.map(r => r.Year.trim()))].sort();
+      years.forEach(y => {
+        const option = document.createElement('option');
+        option.value = y;
+        option.textContent = y;
+        yearSelect.appendChild(option);
+      });
+
+      yearSelect.addEventListener('change', () => {
+        populateDistrictSelect();
+        populateNASelect();
+        updateResults();
+      });
+
+      districtSelect.addEventListener('change', () => {
+        populateNASelect();
+        updateResults();
+      });
+
+      naSelect.addEventListener('change', updateResults);
+
+      yearSelect.value = years[0];
+      populateDistrictSelect();
+      populateNASelect();
+      updateResults();
+    }
+
+    function populateDistrictSelect() {
+      const selectedYear = yearSelect.value.trim();
+      const filteredDistricts = [...new Set(data
+        .filter(r => r.Year.trim() === selectedYear && r.District && r.District.trim() !== '')
+        .map(r => r.District.trim())
+      )].sort();
+
+      // Reset and fill districts
+      districtSelect.innerHTML = '<option value="">-- All Districts --</option>';
+      filteredDistricts.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d;
+        opt.textContent = d;
+        districtSelect.appendChild(opt);
+      });
+
+      districtSelect.value = '';
+    }
+
+    function populateNASelect() {
+      const selectedYear = yearSelect.value.trim();
+      const selectedDistrict = districtSelect.value.trim();
+      let filteredNAs;
+
+      if (selectedDistrict) {
+        filteredNAs = [...new Set(data
+          .filter(r => r.Year.trim() === selectedYear && r.District && r.District.trim() === selectedDistrict && r.NA && r.NA.trim() !== '')
+          .map(r => r.NA.trim()))].sort();
+      } else {
+        // If no district selected, show all NAs for year
+        filteredNAs = [...new Set(data
+          .filter(r => r.Year.trim() === selectedYear && r.NA && r.NA.trim() !== '')
+          .map(r => r.NA.trim()))].sort();
+      }
+
+      naSelect.innerHTML = '<option value="">-- All NAs --</option>';
+      filteredNAs.forEach(n => {
+        const opt = document.createElement('option');
+        opt.value = n;
+        opt.textContent = n;
+        naSelect.appendChild(opt);
+      });
+
+      naSelect.value = '';
+    }
+
+    function updateResults() {
+      const selectedYear = yearSelect.value.trim();
+      const selectedDistrict = districtSelect.value.trim();
+      const selectedNA = naSelect.value.trim();
+
+      // Filter data by selections
+      let filtered = data.filter(r => r.Year.trim() === selectedYear);
+      if (selectedDistrict) {
+        filtered = filtered.filter(r => r.District && r.District.trim() === selectedDistrict);
+      }
+      if (selectedNA) {
+        filtered = filtered.filter(r => r.NA && r.NA.trim() === selectedNA);
+      }
+
+      if (filtered.length === 0) {
+        summaryDiv.innerHTML = '<p class="minimal">No data available for the selected filters.</p>';
+        resultsTable.style.display = 'none';
+        partyChart && partyChart.destroy();
+        partyChartCtx.canvas.style.display = 'none';
+        return;
+      }
+
+      // Candidate with max votes (winner)
+      let sortedByVotes = filtered.slice().sort((a,b) => parseNumber(b.Votes) - parseNumber(a.Votes));
+
+      const winner = sortedByVotes[0];
+      const winnerVotes = parseNumber(winner.Votes);
+      const secondVotes = sortedByVotes.length > 1 ? parseNumber(sortedByVotes[1].Votes) : 0;
+      const margin = winnerVotes - secondVotes;
+
+      // Summary display
+      summaryDiv.innerHTML = `
+        <div class="winner">
+          Winner: <strong>${winner['Candidate Name'] || 'N/A'}</strong> (${winner.Party || 'Unknown Party'})<br/>
+          Votes: ${winnerVotes.toLocaleString()}<br/>
+          Margin of victory: ${margin.toLocaleString()}
+        </div>`;
+
+
+      // Table of candidates sorted by votes descending
+      resultsTbody.innerHTML = '';
+      sortedByVotes.forEach(c => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${c['Candidate Name'] || ''}</td>
+          <td>${c.Party || ''}</td>
+          <td style="text-align:right">${parseNumber(c.Votes).toLocaleString()}</td>
+        `;
+        resultsTbody.appendChild(tr);
+      });
+      resultsTable.style.display = '';
+
+      // Aggregate votes party-wise
+      const partyVotes = {};
+      filtered.forEach(r => {
+        const party = r.Party || 'Independent';
+        const votes = parseNumber(r.Votes);
+        partyVotes[party] = (partyVotes[party] || 0) + votes;
+      });
+
+      const partyLabels = Object.keys(partyVotes).sort((a,b) => partyVotes[b] - partyVotes[a]);
+      const partyData = partyLabels.map(p => partyVotes[p]);
+
+      if (partyChart) {
+        partyChart.destroy();
+      }
+
+      partyChartCtx.canvas.style.display = '';
+      partyChart = new Chart(partyChartCtx, {
+        type: 'bar',
+        data: {
+          labels: partyLabels,
+          datasets: [{
+            label: 'Votes',
+            data: partyData,
+            backgroundColor: partyLabels.map(() => 'rgba(54, 162, 235, 0.7)'),
+            borderColor: partyLabels.map(() => 'rgba(54, 162, 235, 1)'),
+            borderWidth: 1,
+          }]
+        },
+        options: {
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                callback: v => v.toLocaleString()
+              }
+            }
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => ctx.parsed.y.toLocaleString() + ' votes'
+              }
+            }
+          },
+          responsive: true,
+          maintainAspectRatio: false,
+        }
+      });
+    }
+  </script>
+</body>
+</html>
