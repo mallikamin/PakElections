@@ -74,6 +74,14 @@
       }
     });
 
+
+    function parseNumber(val) {
+  const num = Number(val);
+  return isNaN(num) ? 0 : num;
+}
+
+
+    
     function initializeUI() {
       // Get unique years
       years = [...new Set(electionData.map(row => row.Year))].sort();
@@ -111,16 +119,14 @@
       // Sum all Registered Voters values in the filtered year data (excluding blanks)
 const registeredByDistrict = {};
 yearData.forEach(row => {
-  if(row.District && row['Registered Voters']) {
-    registeredByDistrict[row.District] = (registeredByDistrict[row.District] || 0) + row['Registered Voters'];
+  if (row.District) {
+    const regVal = parseNumber(row['Registered Voters']);
+    registeredByDistrict[row.District] = (registeredByDistrict[row.District] || 0) + regVal;
   }
 });
 const totalRegisteredVoters = Object.values(registeredByDistrict).reduce((a,b) => a + b, 0);
 
-
-      // Calculate total turnout by summing Votes column in year filtered data
-      // Votes is turnout column here
-      const totalTurnout = yearData.reduce((sum, r) => sum + (r.Votes || 0), 0);
+const totalTurnout = yearData.reduce((sum, r) => sum + parseNumber(r.Votes), 0);
 
       // Turnout percentage
       const turnoutPercent = totalRegisteredVoters > 0 ? (totalTurnout / totalRegisteredVoters) * 100 : 0;
