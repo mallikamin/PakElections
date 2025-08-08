@@ -245,11 +245,14 @@
         districtAggregates[district] = {registered: 0, turnout: 0};
       }
 
-      // Registered voters once per district - take first matching entry
-      for (const district of selectedDistricts) {
-        const regRow = filteredData.find(r => r.District == district && r['Registered Voters']);
-        districtAggregates[district].registered = regRow ? regRow['Registered Voters'] : 0;
-      }
+      // Sum all Registered Voters values per district (for selected year and selected districts)
+for (const district of selectedDistricts) {
+  const regSum = filteredData
+    .filter(r => r.District == district && r['Registered Voters'])
+    .reduce((sum, r) => sum + (r['Registered Voters'] || 0), 0);
+  districtAggregates[district].registered = regSum;
+}
+
 
       // Sum Votes for each district
       for (const row of filteredData) {
