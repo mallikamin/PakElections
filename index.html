@@ -37,9 +37,18 @@
   <h2>District-wise Analysis</h2>
   <div>
     <label for="districtsSelect">Select District(s) to Compare:</label><br/>
-    <select id="districtsSelect" multiple size="6" style="width:300px;"></select>
+    <input type="text" id="districtSearch" placeholder="Search district..." style="width:300px; margin-bottom:5px;" />
+<select id="districtsSelect" multiple size="6" style="width:300px;"></select>
   </div>
 
+<div>
+  <label for="naSelect">Select NA (National Assembly constituency): </label>
+  <select id="naSelect">
+    <option value="">-- All NAs --</option>
+  </select>
+</div>
+
+  
   <div id="districtAnalysis"></div>
 
   <script>
@@ -83,7 +92,10 @@
         alert('Error loading CSV: ' + err);
       }
     });
-
+    const naSelect = document.getElementById('naSelect');
+    const districtSearch = document.getElementById('districtSearch');
+    
+    
     function initializeUI() {
       // Unique years sorted
       years = [...new Set(electionData.map(row => row.Year.trim()))].sort();
@@ -104,17 +116,83 @@
         districtsSelect.appendChild(option);
       }
 
-      yearSelect.addEventListener('change', onYearChange);
-      districtsSelect.addEventListener('change', onDistrictsChange);
+      yearSelect.addEventListener('change', () => {
+    onYearChange();
+    populateNASelect();
+    filterDistricts();
+  });
 
+  // Filter districts based on search box
+  districtSearch.addEventListener('input', filterDistricts);
+
+  districtsSelect.addEventListener('change', onDistrictsChange);
+  naSelect.addEventListener('change', onDistrictsChange);
+      
       // Default selection
       yearSelect.value = years[0];
-      onYearChange();
-    }
+  populateNASelect();
+  filterDistricts();
+  onYearChange();
+}
 
     function onYearChange() {
       const selectedYear = yearSelect.value.trim();
+      
+    function populateNASelect() {
+  const selectedYear = yearSelect.value.trim();  
+      const nas = [...new Set(
+    electionData
+    .filter(r => r.Year.trim() === selectedYear && r.NA && r.NA.trim() !== '')
+    .map(r => r.NA.trim())
+  )].sort();
 
+
+      naSelect.innerHTML = '<option value="">-- All NAs --</option>';
+  nas.forEach(n => {
+    const opt = document.createElement('option');
+    opt.value = n;
+    opt.textContent = n;
+    naSelect.appendChild(opt);
+  });
+}
+
+
+  function filterDistricts() {
+  const searchTerm = districtSearch.value.trim().toLowerCase();
+  const selectedYear = yearSelect.value.trim();
+
+  // Districts for selected year and search term
+  let filteredDistricts = [...new Set(
+    electionData
+    .filter(r => r.Year.trim() === selectedYear && r.District && r.District.trim() !== '')
+    .map(r => r.District.trim())
+  )];
+
+  if (searchTerm !== '') {
+    filteredDistricts = filteredDistricts.filter(d =>
+      d.toLowerCase().includes(searchTerm)
+    );
+  }
+
+districtsSelect.innerHTML = '';
+  filteredDistricts.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d;
+    opt.textContent = d;
+    districtsSelect.appendChild(opt);
+  });
+    
+
+districtsSelect.selectedIndex = -1;
+  districtAnalysisDiv.innerHTML = '';
+  naSelect.value = '';
+}
+
+
+      
+
+
+    
       // Filter data by selected year
       const yearData = electionData.filter(row => row.Year.trim() === selectedYear);
 
@@ -148,6 +226,7 @@
       // Clear district selections and analysis
       districtAnalysisDiv.innerHTML = '';
       districtsSelect.selectedIndex = -1;
+      naSelect.value = '';
     }
 
     function aggregateByYear() {
