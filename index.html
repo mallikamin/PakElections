@@ -1,1 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Election Data Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .summary { margin-bottom: 20px; }
+    select, #districtsSelect { margin: 5px 0; }
+  </style>
+</head>
+<body>
+
+  <h1>Election Data Dashboard</h1>
+
+  <div>
+    <label for="yearSelect">Select Year: </label>
+    <select id="yearSelect"></select>
+  </div>
+
+  <div class="summary">
+    <p><strong>Total Registered Voters:</strong> <span id="totalRegisteredVoters">-</span></p>
+    <p><strong>Total Turnout (Votes):</strong> <span id="totalTurnout">-</span></p>
+    <p><strong>Turnout %:</strong> <span id="turnoutPercent">-</span></p>
+    <p><strong>Number of Districts:</strong> <span id="numDistricts">-</span></p>
+  </div>
+
+  <canvas id="yearChart" width="800" height="400"></canvas>
+
+  <hr>
+
+  <h2>District-wise Analysis</h2>
+  <div>
+    <label for="districtsSelect">Select District(s) to Compare:</label><br/>
+    <select id="districtsSelect" multiple size="6" style="width:300px;"></select>
+  </div>
+
+  <div id="districtAnalysis"></div>
+
+  <script>
+    // CSV raw URL (put your actual raw GitHub CSV URL here)
+    const csvUrl = 'https://raw.githubusercontent.com/yourusername/yourrepo/main/data.csv';
+
+    let electionData = [];
+    let years = [];
+    let districts = [];
+
+    // Elements
+    const yearSelect = document.getElementById('yearSelect');
+    const totalRegisteredVotersSpan = document.getElementById('totalRegisteredVoters');
+    const totalTurnoutSpan = document.getElementById('totalTurnout');
+    const turnoutPercentSpan = document.getElementById('turnoutPercent');
+    const numDistrictsSpan = document.getElementById('numDistricts');
+    const yearChartCtx = document.getElementById('yearChart').getContext('2d');
+
+    const districtsSelect = document.getElementById('districtsSelect');
+    const districtAnalysisDiv = document.getElementById('districtAnalysis');
+
+    let yearChart;
+
+    // Load and parse CSV
+    Papa.parse(csvUrl, {
+      download: true,
+      header: true,
+      dynamicTyping: true,
+      complete: function(results) {
+        electionData = results.data.filter(row => row.Year); // filter out any empty rows
+        initializeUI();
+      },
+      error: function(err) {
+        alert('Error loading CSV: ' + err);
+      }
+    });
+
+    function initializeUI() {
+      // Get unique years
+      years = [...new Set(electionData.map(row => row.Year))].sort();
+      for (const y of years) {
+        const option = document.createElement('option');
+        option.value = y;
+        option.textContent = y;
+        yearSelect.appendChild(option);
+      }
+
+      // Get unique districts
+      districts = [...new Set(electionData.map(row => row.District).filter(d => d))].sort();
+      districtsSelect.innerHTML = '';
+      for (const d of districts) {
+        const option = document.createElement('option');
+        option.value = d;
+        option.textContent = d;
+        districtsSelect.appendChild(option);
+      }
+
+      yearSelect.addEventListener('change', onYearChange);
+      districtsSelect.addEventListener('change', onDistrictsChange);
+
+      yearSelect.value = years[0];
+      onYearChange();
+    }
+
+    function onYearChange() {
+      const selectedYear = yearSelect.value;
+
+      // Filter data for selected year
+      const yearData = electionData.filter(row => row.Year == selectedYear);
+
+      // Calculate Total Registered Voters (sum unique districts)
+      // Since Registered Voters per district appears once, filter first entry per district
+      const uniqueDistricts = {};
+      for (const row of yearData) {
+        if (row.District && row['Registered Voters'] && !uniqueDistricts[row.District]) {
+          uniqueDistricts[row.District] = row['Registered Voters'];
+        }
+      }
+      const totalRegisteredVoters = Object.values(uniqueDistricts).reduce((a, b) => a + b, 0);
+
+      // Calculate total turnout by summing Votes column in year filtered data
+      // Votes is turnout column here
+      const totalTurnout = yearData.reduce((sum, r) => sum + (r.Votes || 0), 0);
+
+      // Turnout percentage
+      const turnoutPercent = totalRegisteredVoters > 0 ? (totalTurnout / totalRegisteredVoters) * 100 : 0;
+
+      // Number of districts
+      const numDistricts = Object.keys(uniqueDistricts).length;
+
+      // Display values
+      totalRegisteredVotersSpan.textContent = totalRegisteredVoters.toLocaleString();
+      totalTurnoutSpan.textContent = totalTurnout.toLocaleString();
+      turnoutPercentSpan.textContent = turnoutPercent.toFixed(2) + '%';
+      numDistrictsSpan.textContent = numDistricts;
+
+      updateYearChart();
+
+      districtAnalysisDiv.innerHTML = '';
+      districtsSelect.selectedIndex = -1; // deselect districts on year change
+    }
+
+    function aggregateByYear() {
+      // Aggregate for all years - sum Registered Voters and Votes per year
+
+      // Using Map for year aggregates
+      const aggregates = {};
+
+      for (const row of electionData) {
+        const y = row.Year;
+        if (!y) continue;
+
+        if (!aggregates[y]) {
+          aggregates[y] = {registeredByDistrict: {}, votes: 0};
+        }
+
+        // Registered Voters per district once
+        if (row.District && row['Registered Voters'] && !aggregates[y].registeredByDistrict[row.District]) {
+          aggregates[y].registeredByDistrict[row.District] = row['Registered Voters'];
+        }
+        aggregates[y].votes += (row.Votes || 0);
+      }
+
+      // Summarize registered voters per year and prepare arrays
+      const yearsSorted = Object.keys(aggregates).sort();
+      const regVotersArr = [];
+      const votesArr = [];
+
+      for (const y of yearsSorted) {
+        const regSum = Object.values(aggregates[y].registeredByDistrict).reduce((a,b)=>a+b,0);
+        regVotersArr.push(regSum);
+        votesArr.push(aggregates[y].votes);
+      }
+
+      return {yearsSorted, regVotersArr, votesArr};
+    }
+
+    function updateYearChart() {
+      const {yearsSorted, regVotersArr, votesArr} = aggregateByYear();
+
+      if (yearChart) {
+        yearChart.destroy();
+      }
+
+      yearChart = new Chart(yearChartCtx, {
+        type: 'line',
+        data: {
+          labels: yearsSorted,
+          datasets: [
+            {
+              label: 'Registered Voters',
+              data: regVotersArr,
+              borderColor: 'blue',
+              fill: false,
+            },
+            {
+              label: 'Turnout (Votes)',
+              data: votesArr,
+              borderColor: 'green',
+              fill: false,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          interaction: {
+            mode: 'index',
+            intersect: false,
+          },
+          plugins: {
+            title: {
+              display: true,
+              text: 'Year-wise Registered Voters vs Turnout'
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                callback: function(value) {
+                  return value.toLocaleString();
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // District-wise analysis, comparing selected districts (for the selected year)
+    function onDistrictsChange() {
+      const selectedYear = yearSelect.value;
+      const selectedDistricts = Array.from(districtsSelect.selectedOptions).map(o => o.value);
+
+      if (selectedDistricts.length === 0) {
+        districtAnalysisDiv.innerHTML = '<p>Please select one or more districts to compare.</p>';
+        return;
+      }
+
+      // Filter data by year and by selected districts
+      const filteredData = electionData.filter(row => row.Year == selectedYear && selectedDistricts.includes(row.District));
+
+      // Aggregate turnout and registered voters per district
+      const districtAggregates = {};
+      for (const district of selectedDistricts) {
+        districtAggregates[district] = {registered: 0, turnout: 0};
+      }
+
+      // Registered voters once per district - take first matching entry
+      for (const district of selectedDistricts) {
+        const regRow = filteredData.find(r => r.District == district && r['Registered Voters']);
+        districtAggregates[district].registered = regRow ? regRow['Registered Voters'] : 0;
+      }
+
+      // Sum Votes for each district
+      for (const row of filteredData) {
+        if (row.District && row.Votes) {
+          districtAggregates[row.District].turnout += row.Votes;
+        }
+      }
+
+      // Build HTML for comparison table
+      let html = `<table border="1" cellpadding="5" cellspacing="0">
+        <thead>
+          <tr><th>District</th><th>Registered Voters</th><th>Turnout (Votes)</th><th>Turnout %</th></tr>
+        </thead><tbody>`;
+
+      for (const district of selectedDistricts) {
+        const reg = districtAggregates[district].registered;
+        const turnout = districtAggregates[district].turnout;
+        const percent = reg > 0 ? (turnout / reg) * 100 : 0;
+
+        html += `<tr>
+          <td>${district}</td>
+          <td>${reg.toLocaleString()}</td>
+          <td>${turnout.toLocaleString()}</td>
+          <td>${percent.toFixed(2)}%</td>
+        </tr>`;
+      }
+
+      html += '</tbody></table>';
+
+      districtAnalysisDiv.innerHTML = html;
+    }
+  </script>
+
+</body>
+</html>
 
