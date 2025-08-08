@@ -108,14 +108,8 @@
       const yearData = electionData.filter(row => row.Year == selectedYear);
 
       // Calculate Total Registered Voters (sum unique districts)
-      // Since Registered Voters per district appears once, filter first entry per district
-      const uniqueDistricts = {};
-      for (const row of yearData) {
-        if (row.District && row['Registered Voters'] && !uniqueDistricts[row.District]) {
-          uniqueDistricts[row.District] = row['Registered Voters'];
-        }
-      }
-      const totalRegisteredVoters = Object.values(uniqueDistricts).reduce((a, b) => a + b, 0);
+      // Sum all Registered Voters values in the filtered year data (excluding blanks)
+const totalRegisteredVoters = yearData.reduce((sum, row) => sum + (row['Registered Voters'] || 0), 0);
 
       // Calculate total turnout by summing Votes column in year filtered data
       // Votes is turnout column here
